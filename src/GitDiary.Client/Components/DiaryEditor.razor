@@ -1,6 +1,7 @@
 @using GitDiary.Client.Stores
 @using GitDiary.Client.Models
 @using GitDiary.Client.Infrastructure
+@using GitDiary.Client.Services
 @implements IDisposable
 
 <div class="diary-editor">
@@ -10,19 +11,19 @@
             <span class="editor-date">@DiaryStore.CurrentEntry.Date.ToString("yyyy-MM-dd")</span>
             <div class="editor-actions">
                 <button class="btn-save" @onclick="SaveAsync" disabled="@(!DiaryStore.IsDirty)">
-                    💾 Save
+                    @L["editor.save"]
                 </button>
                 <button class="btn-commit"
                         @onclick="CommitAsync"
                         disabled="@(!CanCommit)"
-                        title="Push the current draft to GitHub">
+                        title="@L["editor.commitTooltip"]">
                     @CommitButtonLabel
                 </button>
                 <button class="btn-preview-toggle" @onclick="TogglePreview">
-                    @(ShowPreview ? "✏️ Edit" : "👁️ Preview")
+                    @(ShowPreview ? L["editor.edit"] : L["editor.preview"])
                 </button>
                 <button class="btn-delete" @onclick="ConfirmDelete">
-                    🗑️ Delete
+                    @L["editor.delete"]
                 </button>
             </div>
         </div>
@@ -36,7 +37,7 @@
                     @bind:event="oninput"
                     @onkeyup="HandleInput"
                     rows="20"
-                    placeholder="Start writing your diary..."></textarea>
+                    placeholder="@L["editor.placeholder"]"></textarea>
             }
             else
             {
@@ -48,14 +49,14 @@
     }
     else if (DiaryStore.IsLoading)
     {
-        <div class="editor-loading">Loading...</div>
+        <div class="editor-loading">@L["editor.loading"]</div>
     }
     else
     {
         <div class="editor-empty">
             <div class="empty-icon">📝</div>
-            <h2>GitDiary</h2>
-            <p>Select a date from the sidebar or click "+ Today" to start writing.</p>
+            <h2>@L["editor.emptyTitle"]</h2>
+            <p>@L["editor.emptyHint"]</p>
         </div>
     }
 </div>
@@ -65,12 +66,12 @@
     <div class="modal-overlay" @onclick="CancelDelete">
         <div class="modal-dialog" @onclick:stopPropagation="true">
             <div class="modal-content">
-                <h3>Delete Diary</h3>
-                <p>Are you sure you want to delete this diary entry?</p>
+                <h3>@L["editor.deleteTitle"]</h3>
+                <p>@L["editor.deleteConfirm"]</p>
                 <p class="modal-date">@DiaryStore?.CurrentEntry?.Date.ToString("yyyy-MM-dd")</p>
                 <div class="modal-actions">
-                    <button class="btn-cancel" @onclick="CancelDelete">Cancel</button>
-                    <button class="btn-confirm-delete" @onclick="DeleteAsync">Delete</button>
+                    <button class="btn-cancel" @onclick="CancelDelete">@L["editor.cancel"]</button>
+                    <button class="btn-confirm-delete" @onclick="DeleteAsync">@L["editor.confirmDelete"]</button>
                 </div>
             </div>
         </div>
@@ -80,6 +81,9 @@
 @code {
     [Inject]
     private DiaryStore DiaryStore { get; set; } = default!;
+
+    [Inject]
+    private LocalizationService L { get; set; } = default!;
 
     private bool ShowPreview;
     private bool ShowDeleteConfirm;
@@ -95,15 +99,16 @@
 
     private string CommitButtonLabel => DiaryStore.SyncState switch
     {
-        SyncState.Saving => "⏫ Committing…",
-        SyncState.Conflict => "⚠️ Commit (Conflict)",
-        SyncState.Failed => "🔁 Retry Commit",
-        _ => "⏫ Commit"
+        SyncState.Saving => L["editor.committing"],
+        SyncState.Conflict => L["editor.commitConflict"],
+        SyncState.Failed => L["editor.retryCommit"],
+        _ => L["editor.commit"]
     };
 
     protected override void OnInitialized()
     {
         DiaryStore.StateChanged += HandleStoreChanged;
+        L.StateChanged += HandleStoreChanged;
     }
 
     private async void HandleStoreChanged()
@@ -199,6 +204,7 @@
     public void Dispose()
     {
         DiaryStore.StateChanged -= HandleStoreChanged;
+        L.StateChanged -= HandleStoreChanged;
         _debounceTimer?.Dispose();
     }
 }

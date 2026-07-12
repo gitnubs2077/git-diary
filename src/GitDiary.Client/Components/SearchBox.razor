@@ -1,10 +1,11 @@
 @using GitDiary.Client.Services
+@implements IDisposable
 
 <div class="search-box">
     <div class="search-input-wrapper">
         <input
             type="text"
-            placeholder="Search diary entries..."
+            placeholder="@L["search.placeholder"]"
             @bind="Keyword"
             @bind:event="oninput"
             @onkeyup="HandleKeyUp"
@@ -18,7 +19,7 @@
     {
         <div class="search-results">
             <div class="search-results-header">
-                Found @SearchResults.Count result(s)
+                @L.Format("search.found", SearchResults.Count)
                 <button class="btn-close-results" @onclick="ClearSearch">✕</button>
             </div>
             @foreach (var result in SearchResults)
@@ -39,12 +40,25 @@
     [Inject]
     private Stores.DiaryStore DiaryStore { get; set; } = default!;
 
+    [Inject]
+    private LocalizationService L { get; set; } = default!;
+
     [Parameter]
     public EventCallback<DateOnly> OnEntrySelected { get; set; }
 
     private string Keyword { get; set; } = "";
     private List<Models.DiaryEntry>? SearchResults { get; set; }
     private ElementReference SearchInput;
+
+    protected override void OnInitialized()
+    {
+        L.StateChanged += HandleLocalizationChanged;
+    }
+
+    private async void HandleLocalizationChanged()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
 
     private async Task HandleKeyUp(KeyboardEventArgs e)
     {
@@ -96,5 +110,10 @@
         // Remove markdown headers and take first 100 chars
         var plain = System.Text.RegularExpressions.Regex.Replace(content, @"^#+\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
         return plain.Length > 100 ? plain[..100] + "..." : plain;
+    }
+
+    public void Dispose()
+    {
+        L.StateChanged -= HandleLocalizationChanged;
     }
 }

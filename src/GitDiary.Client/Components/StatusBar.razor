@@ -1,33 +1,34 @@
 @using GitDiary.Client.Stores
 @using GitDiary.Client.Models
+@using GitDiary.Client.Services
 @implements IDisposable
 
 <div class="status-bar">
     <div class="status-left">
         @if (DiaryStore.SyncState == SyncState.Synced)
         {
-            <span class="status-synced">✅ Committed</span>
+            <span class="status-synced">@L["status.committed"]</span>
         }
         else if (DiaryStore.SyncState == SyncState.Saving)
         {
-            <span class="status-saving">⏫ Committing…</span>
+            <span class="status-saving">@L["status.committing"]</span>
         }
         else if (DiaryStore.SyncState == SyncState.Pending)
         {
-            <span class="status-pending">📝 Draft saved locally — not committed</span>
+            <span class="status-pending">@L["status.pending"]</span>
         }
         else if (DiaryStore.SyncState == SyncState.Conflict)
         {
-            <span class="status-conflict">⚠️ Conflict — commit rejected</span>
+            <span class="status-conflict">@L["status.conflict"]</span>
         }
         else if (DiaryStore.SyncState == SyncState.Failed)
         {
-            <span class="status-failed">❌ Commit Failed — draft kept locally</span>
+            <span class="status-failed">@L["status.failed"]</span>
         }
 
         @if (DiaryStore.IsDirty)
         {
-            <span class="status-message">• unsaved changes</span>
+            <span class="status-message">@L["status.unsaved"]</span>
         }
 
         @if (!string.IsNullOrEmpty(StatusMessage))
@@ -36,7 +37,7 @@
         }
     </div>
     <div class="status-right">
-        <span class="status-entries">@DiaryStore.Entries.Count entries</span>
+        <span class="status-entries">@L.Format("status.entries", DiaryStore.Entries.Count)</span>
     </div>
 </div>
 
@@ -44,12 +45,16 @@
     [Inject]
     private DiaryStore DiaryStore { get; set; } = default!;
 
+    [Inject]
+    private LocalizationService L { get; set; } = default!;
+
     [Parameter]
     public string? StatusMessage { get; set; }
 
     protected override void OnInitialized()
     {
         DiaryStore.StateChanged += HandleStoreChanged;
+        L.StateChanged += HandleStoreChanged;
     }
 
     private async void HandleStoreChanged()
@@ -60,5 +65,6 @@
     public void Dispose()
     {
         DiaryStore.StateChanged -= HandleStoreChanged;
+        L.StateChanged -= HandleStoreChanged;
     }
 }

@@ -16,10 +16,17 @@ builder.Services.AddScoped<GitHubApiClient>();
 builder.Services.AddScoped<DiaryRepository>();
 builder.Services.AddSingleton<IndexedDbRepository>();
 builder.Services.AddSingleton<SearchService>();
+builder.Services.AddScoped<LocalizationService>();
 builder.Services.AddScoped<SyncService>();
 
 // Stores
 builder.Services.AddSingleton<SettingsStore>();
 builder.Services.AddScoped<DiaryStore>();
 
-await builder.Build().RunAsync();
+var host = builder.Build();
+
+// Load persisted UI language from localStorage before the first render so the
+// Setup Wizard already shows in the user's preferred language.
+await host.Services.GetRequiredService<LocalizationService>().InitializeAsync();
+
+await host.RunAsync();

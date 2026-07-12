@@ -1,20 +1,32 @@
 @using GitDiary.Client.Infrastructure
 @using GitDiary.Client.Models
 @using GitDiary.Client.Stores
+@using GitDiary.Client.Services
+@implements IDisposable
 
 <div class="sidebar">
     <div class="sidebar-header">
-        <h3>📅 Diary</h3>
+        <h3>@L["sidebar.title"]</h3>
         <div class="sidebar-header-actions">
-            <button class="btn-icon" @onclick="OpenSettings" title="Settings">⚙️</button>
-            <button class="btn-new" @onclick="CreateTodayEntry">+ Today</button>
+            <select
+                class="sidebar-lang"
+                value="@L.CurrentLanguage"
+                @onchange="OnLanguageChanged"
+                title="@L["sidebar.language"]">
+                @foreach (var lang in L.AvailableLanguages)
+                {
+                    <option value="@lang">@lang.DisplayName()</option>
+                }
+            </select>
+            <button class="btn-icon" @onclick="OpenSettings" title="@L["sidebar.settings"]">⚙️</button>
+            <button class="btn-new" @onclick="CreateTodayEntry">@L["sidebar.newToday"]</button>
         </div>
     </div>
 
     <div class="sidebar-search">
         <input
             type="text"
-            placeholder="Search..."
+            placeholder="@L["sidebar.searchPlaceholder"]"
             @bind="SearchKeyword"
             @bind:event="oninput"
             @onkeyup="HandleSearchKeyUp" />
@@ -61,7 +73,7 @@
 
         @if (GroupedEntries is null || !GroupedEntries.Any())
         {
-            <div class="sidebar-empty">No diary entries yet.</div>
+            <div class="sidebar-empty">@L["sidebar.empty"]</div>
         }
     </div>
 </div>
@@ -69,6 +81,9 @@
 @code {
     [Inject]
     private DiaryStore DiaryStore { get; set; } = default!;
+
+    [Inject]
+    private LocalizationService L { get; set; } = default!;
 
     [Parameter]
     public EventCallback<DateOnly> OnEntrySelected { get; set; }
@@ -88,13 +103,27 @@
     protected override async Task OnInitializedAsync()
     {
         await DiaryStore.RefreshEntriesAsync();
-        DiaryStore.StateChanged += async () => await InvokeAsync(StateHasChanged);
+        DiaryStore.StateChanged += HandleStateChanged;
+        L.StateChanged += HandleStateChanged;
 
         // Auto select today
         if (SelectedDate == null)
         {
             var today = PathHelper.GetToday();
             await SelectEntry(today);
+        }
+    }
+
+    private async void HandleStateChanged()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnLanguageChanged(ChangeEventArgs e)
+    {
+        if (e.Value is string raw && Enum.TryParse<Language>(raw, out var lang))
+        {
+            await L.SetLanguageAsync(lang);
         }
     }
 
@@ -168,6 +197,12 @@
             // Search will be handled by SearchBox component
         }
         await Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        DiaryStore.StateChanged -= HandleStateChanged;
+        L.StateChanged -= HandleStateChanged;
     }
 
     private class YearGroup
