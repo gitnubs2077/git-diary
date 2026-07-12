@@ -46,7 +46,12 @@
             @foreach (var yearGroup in GroupedEntries)
             {
                 <div class="year-group">
-                    <div class="year-header" @onclick="() => ToggleYear(yearGroup.Year)">
+                    <div class="year-header"
+                         role="button"
+                         tabindex="0"
+                         aria-expanded="@ExpandedYears.Contains(yearGroup.Year).ToString().ToLowerInvariant()"
+                         @onclick="() => ToggleYear(yearGroup.Year)"
+                         @onkeydown="e => OnActivateKey(e, () => ToggleYear(yearGroup.Year))">
                         <span class="toggle-icon">@(ExpandedYears.Contains(yearGroup.Year) ? "▼" : "▶")</span>
                         <span class="year-label">@yearGroup.Year</span>
                     </div>
@@ -56,7 +61,12 @@
                         @foreach (var monthGroup in yearGroup.Months)
                         {
                             <div class="month-group">
-                                <div class="month-header" @onclick="() => ToggleMonth(monthGroup.Year, monthGroup.Month)">
+                                <div class="month-header"
+                                     role="button"
+                                     tabindex="0"
+                                     aria-expanded="@ExpandedMonths.Contains((monthGroup.Year, monthGroup.Month)).ToString().ToLowerInvariant()"
+                                     @onclick="() => ToggleMonth(monthGroup.Year, monthGroup.Month)"
+                                     @onkeydown="e => OnActivateKey(e, () => ToggleMonth(monthGroup.Year, monthGroup.Month))">
                                     <span class="toggle-icon">@(ExpandedMonths.Contains((monthGroup.Year, monthGroup.Month)) ? "▼" : "▶")</span>
                                     <span class="month-label">@monthGroup.Month.ToString("D2")</span>
                                 </div>
@@ -67,7 +77,11 @@
                                     {
                                         <div
                                             class="diary-entry-item @(IsSelected(entry.Date) ? "selected" : "") @(IsToday(entry.Date) ? "is-today" : "")"
-                                            @onclick="() => SelectEntry(entry.Date)">
+                                            role="button"
+                                            tabindex="0"
+                                            aria-current="@(IsSelected(entry.Date) ? "true" : "false")"
+                                            @onclick="() => SelectEntry(entry.Date)"
+                                            @onkeydown="e => OnActivateKey(e, () => SelectEntry(entry.Date))">
                                             @entry.Date.ToString("yyyy-MM-dd")
                                             @if (IsToday(entry.Date))
                                             {
@@ -264,6 +278,28 @@
     private bool IsSelected(DateOnly date) => SelectedDate == date;
 
     private bool IsToday(DateOnly date) => date == PathHelper.GetToday();
+
+    // Turns Enter / Space presses on role="button" divs into activations. Space
+    // must be intercepted synchronously so the browser's default page-scroll
+    // doesn't fire; Enter is a no-op default anyway but handled here for
+    // consistency.
+    private static Task OnActivateKey(KeyboardEventArgs e, Action action)
+    {
+        if (e.Key == "Enter" || e.Key == " " || e.Key == "Spacebar")
+        {
+            action();
+        }
+        return Task.CompletedTask;
+    }
+
+    private static Task OnActivateKey(KeyboardEventArgs e, Func<Task> action)
+    {
+        if (e.Key == "Enter" || e.Key == " " || e.Key == "Spacebar")
+        {
+            return action();
+        }
+        return Task.CompletedTask;
+    }
 
     private async Task ToggleYear(int year)
     {

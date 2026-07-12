@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Sidebar tree now refreshes automatically after a **new day's first commit** —
+  no more page-reload to see the new date appear.
+- Sidebar tree now refreshes after **delete** so the removed entry disappears
+  immediately.
+- **Delete failures are no longer silent.** `DeleteCurrentEntryAsync` returns
+  a `Result<bool>` and the editor keeps the modal open on failure, flips the
+  status bar to Failed, and logs the API error. Previously a 5xx would clear
+  the UI while the entry stayed on GitHub.
+- Rapid double-click on **Commit**, **Delete-confirm**, and **Save Config**
+  can no longer fire two GitHub round-trips (in-flight guards short-circuit
+  the second re-entry before Blazor re-renders `disabled`).
+- Delete-modal initial focus now lands on the **destructive button** itself,
+  not on the wrapper `<div>` — keyboard users can confirm with Enter directly.
+- OS **`prefers-color-scheme` listener** is now unregistered on `ThemeService`
+  dispose. Previously it kept a closure over a disposed `DotNetObjectReference`
+  and threw on the next OS-level theme flip.
+- `SyncService` and `OnlineSyncCoordinator` catches now log at
+  `console.error` instead of swallowing silently.
+- Boot IIFE in `index.html` gracefully degrades when `window.matchMedia`
+  is missing (very old WebViews); the theme + shortcut + net-status bridges
+  no longer all disappear because of a single unsupported API.
+
+### Performance
+
+- **Search index is cached** by `path:sha` fingerprint. Re-opening Search
+  after a Sidebar/Editor round-trip no longer re-downloads every diary file;
+  the index is rebuilt only when the tree actually changed.
+- `SearchService.Search` no longer allocates two lowercase copies of every
+  diary body per query — `Contains(..., OrdinalIgnoreCase)` already handles
+  case folding.
+
 ## [1.0.0] — 2026-07-12
 
 Initial public release.

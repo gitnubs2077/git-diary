@@ -18,7 +18,7 @@
                 </button>
                 <button class="btn-commit"
                         @onclick="CommitAsync"
-                        disabled="@(!CanCommit)"
+                        disabled="@(!CanCommit || _commitInFlight)"
                         title="@L["editor.commitTooltip"]">
                     @CommitButtonLabel
                 </button>
@@ -84,7 +84,7 @@
                 <p class="modal-date">@DiaryStore?.CurrentEntry?.Date.ToString("yyyy-MM-dd")</p>
                 <div class="modal-actions">
                     <button class="btn-cancel" @onclick="CancelDelete">@L["editor.cancel"]</button>
-                    <button class="btn-confirm-delete" @onclick="DeleteAsync" @ref="_deleteConfirmRef">@L["editor.confirmDelete"]</button>
+                    <button class="btn-confirm-delete" @onclick="DeleteAsync" @ref="_deleteConfirmRef" disabled="@_deleteInFlight">@L["editor.confirmDelete"]</button>
                 </div>
             </div>
         </div>
@@ -103,6 +103,12 @@
     private ElementReference _deleteDialogRef;
     private ElementReference _deleteConfirmRef;
     private bool _focusDeleteConfirm;
+    // In-flight guards. `disabled="@..."` only takes effect after Blazor re-renders,
+    // and a rapid double-click can re-enter the click handler before that render
+    // completes — firing two GitHub round-trips in a row. These flags short-circuit
+    // the second entry synchronously.
+    private bool _commitInFlight;
+    private bool _deleteInFlight;
 
     // Debounce uses a CancellationTokenSource + Task.Delay rather than
     // System.Threading.Timer. With Timer, Dispose() cannot cancel a callback
@@ -239,13 +245,22 @@
 
     private async Task CommitAsync()
     {
-        // Ensure the latest keystrokes are captured into the draft before pushing.
-        CancelDebounce();
-        if (DiaryStore.IsDirty)
+        if (_commitInFlight) return;
+        _commitInFlight = true;
+        try
         {
-            await DiaryStore.SaveDraftAsync();
+            // Ensure the latest keystrokes are captured into the draft before pushing.
+            CancelDebounce();
+            if (DiaryStore.IsDirty)
+            {
+                await DiaryStore.SaveDraftAsync();
+            }
+            await DiaryStore.CommitCurrentEntryAsync();
         }
-        await DiaryStore.CommitCurrentEntryAsync();
+        finally
+        {
+            _commitInFlight = false;
+        }
     }
 
     private void ConfirmDelete()
@@ -274,11 +289,12 @@
             _focusDeleteConfirm = false;
             try
             {
-                // Initial focus lands on the destructive button so keyboard users
-                // see where the modal is; the modal owner's Escape key still
-                // aborts. If you'd rather auto-focus the cancel button instead,
-                // switch to _deleteDialogRef → Cancel.
-                await _deleteDialogRef.FocusAsync();
+                // Focus lands on the destructive button — the reference actually
+                // captured at render time (`_deleteConfirmRef`). Previously we
+                // focused the wrapper `<div>` (`_deleteDialogRef`), which meant
+                // keyboard users landed on the container and had to Tab twice to
+                // reach an actionable element.
+                await _deleteConfirmRef.FocusAsync();
             }
             catch
             {
@@ -289,8 +305,25 @@
 
     private async Task DeleteAsync()
     {
-        ShowDeleteConfirm = false;
-        await DiaryStore.DeleteCurrentEntryAsync();
+        if (_deleteInFlight) return;
+        _deleteInFlight = true;
+        try
+        {
+            var result = await DiaryStore.DeleteCurrentEntryAsync();
+            if (result.IsFailure)
+            {
+                // Leave the modal open so the user can retry. SyncState is now
+                // Failed, so the status bar surfaces the problem; console gets
+                // the exact API error for bug reports.
+                Console.Error.WriteLine($"[GitDiary] DiaryEditor.DeleteAsync failed: {result.Error}");
+                return;
+            }
+            ShowDeleteConfirm = false;
+        }
+        finally
+        {
+            _deleteInFlight = false;
+        }
     }
 
     // Empty-state CTA: when nothing has been selected yet, one click drops the

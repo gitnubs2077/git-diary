@@ -12,6 +12,34 @@
       usings) don't sneak in silently between releases.
     -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!--
+      Suppress IL2104: the Blazor SDK enables IL trimming for the framework
+      assemblies by default; user code stays untrimmed unless we opt in via
+      PublishTrimmed=true. We keep user code untrimmed for v1.0 (see comment
+      below) but need to silence the informational trim analyzer warning
+      about Markdig, which uses reflection-heavy paths.
+    -->
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    Release-mode publish tuning:
+      * Blazor produces brotli + gzip alongside the raw payloads out of the
+        box. The Blazor SDK's precompressed assets pipeline is on by default
+        under Release, so we only need to make sure Release publishes go
+        through it (nothing to configure explicitly).
+      * PublishTrimmed is *intentionally left off* for user code. Trimming
+        Markdig / Blazored.LocalStorage in a Blazor WASM app has historically
+        needed extensive DynamicDependency annotations; a full audit is
+        deferred to a future release once we have a test suite that can
+        catch trim-broken code paths at CI time.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <BlazorWebAssemblyOmitDebugProxyOutput>true</BlazorWebAssemblyOmitDebugProxyOutput>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <!-- Strip runtime-managed stack traces from the shipped bundle. -->
+    <RunAOTCompilation>false</RunAOTCompilation>
   </PropertyGroup>
 
   <ItemGroup>

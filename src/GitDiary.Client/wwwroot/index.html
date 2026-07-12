@@ -28,9 +28,18 @@
     <script>
         // Theme boot + interop. Runs before the Blazor loader so the persisted (or
         // OS-preferred) theme is applied to <html> before first paint — no dark flash.
+        // The whole IIFE is wrapped in try/catch so a single unsupported API on an
+        // ancient UA (e.g. matchMedia returning null on legacy embedded WebViews) can't
+        // take down every gitdiary* bridge and leave the app with no keyboard shortcuts,
+        // no beforeunload guard, no theme sync, etc.
         (function () {
             const html = document.documentElement;
-            const mql = window.matchMedia('(prefers-color-scheme: dark)');
+            // matchMedia is present in every browser Blazor WASM supports, but guard
+            // against embedded WebViews / test doubles that return null.
+            const mqlRaw = (typeof window.matchMedia === 'function')
+                ? window.matchMedia('(prefers-color-scheme: dark)')
+                : null;
+            const mql = mqlRaw || { matches: false, addEventListener: null, addListener: null };
 
             function resolve(stored) {
                 if (stored === 'light' || stored === 'dark') return stored;
@@ -48,15 +57,28 @@
                         html.dataset.theme = resolved;
                     }
                 },
+                _watchHandler: null,
                 watchSystem: function (dotNetRef) {
-                    const handler = function (e) {
-                        dotNetRef.invokeMethodAsync('OnSystemThemeChanged', e.matches);
+                    if (this._watchHandler) return;
+                    const self = this;
+                    this._watchHandler = function (e) {
+                        try { dotNetRef.invokeMethodAsync('OnSystemThemeChanged', e.matches); }
+                        catch (_) { /* .NET side torn down */ }
                     };
                     if (mql.addEventListener) {
-                        mql.addEventListener('change', handler);
+                        mql.addEventListener('change', this._watchHandler);
                     } else if (mql.addListener) {
-                        mql.addListener(handler);
+                        mql.addListener(this._watchHandler);
                     }
+                },
+                unwatchSystem: function () {
+                    if (!this._watchHandler) return;
+                    if (mql.removeEventListener) {
+                        mql.removeEventListener('change', this._watchHandler);
+                    } else if (mql.removeListener) {
+                        mql.removeListener(this._watchHandler);
+                    }
+                    this._watchHandler = null;
                 }
             };
 

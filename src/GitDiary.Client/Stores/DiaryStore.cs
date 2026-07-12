@@ -1,3 +1,4 @@
+using GitDiary.Client.Infrastructure;
 using GitDiary.Client.Models;
 using GitDiary.Client.Services;
 
@@ -159,6 +160,7 @@ public sealed class DiaryStore : StoreBase
         // Snapshot the exact bytes we are about to send. Anything the user types
         // after this line is a NEW edit that must survive the commit.
         var committedContent = CurrentContent;
+        var wasNewFile = string.IsNullOrEmpty(CurrentEntry.Sha);
 
         // Snapshot latest buffer into the entry and into the local draft first,
         // so nothing is lost if the network call fails.
@@ -204,6 +206,15 @@ public sealed class DiaryStore : StoreBase
             {
                 await _indexedDb.RemoveDraftAsync(CurrentEntry.Path);
             }
+
+            // A brand-new file needs to show up in the sidebar tree. Otherwise the
+            // just-committed day is invisible until page reload or the next `online`
+            // event. Existing files already appear (the tree entry was there); skip
+            // the extra GitHub GET in that case.
+            if (wasNewFile)
+            {
+                await RefreshEntriesAsync();
+            }
         }
         else
         {
@@ -227,15 +238,32 @@ public sealed class DiaryStore : StoreBase
         }
     }
 
-    public async Task DeleteCurrentEntryAsync()
+    public async Task<Result<bool>> DeleteCurrentEntryAsync()
     {
-        if (CurrentEntry == null) return;
-        await _diaryRepo.DeleteAsync(CurrentEntry);
-        await _indexedDb.RemoveDraftAsync(CurrentEntry.Path);
+        if (CurrentEntry == null) return Result<bool>.Success(true);
+
+        var path = CurrentEntry.Path;
+        var result = await _diaryRepo.DeleteAsync(CurrentEntry);
+        if (result.IsFailure)
+        {
+            // Surface the failure to the caller (the editor) so the user sees
+            // *why* the entry didn't disappear. Do NOT clear the local buffer —
+            // otherwise the UI silently drops content that still lives on GitHub.
+            CurrentEntry.SyncState = SyncState.Failed;
+            SyncState = SyncState.Failed;
+            return result;
+        }
+
+        await _indexedDb.RemoveDraftAsync(path);
         CurrentEntry = null;
         CurrentContent = "";
         IsDirty = false;
         SyncState = SyncState.Synced;
+
+        // Drop the deleted date from the sidebar tree so it disappears immediately
+        // instead of reappearing until the next tree fetch.
+        await RefreshEntriesAsync();
+        return Result<bool>.Success(true);
     }
 
     public async Task RefreshEntriesAsync()
@@ -249,6 +277,14 @@ public sealed class DiaryStore : StoreBase
 
     public async Task BuildSearchIndexAsync()
     {
+        // Fingerprint the entry set — path + SHA per row. If nothing on the
+        // GitHub side changed since the last index build, we can reuse the
+        // existing SearchService index instead of re-downloading N files.
+        // This is what turns "Search on a 300-entry repo" from a 30-second
+        // wait into an instant hit on repeat queries.
+        var fingerprint = ComputeEntryFingerprint(_entries);
+        if (fingerprint == _searchIndexFingerprint) return;
+
         var entries = new List<DiaryEntry>();
         foreach (var info in _entries)
         {
@@ -259,5 +295,21 @@ public sealed class DiaryStore : StoreBase
             }
         }
         _searchService.BuildIndex(entries);
+        _searchIndexFingerprint = fingerprint;
+    }
+
+    private string? _searchIndexFingerprint;
+
+    private static string ComputeEntryFingerprint(List<DiaryEntryInfo> entries)
+    {
+        // Order-stable hash — Path uniquely identifies a diary file and Sha
+        // changes on every write, so the pair is sufficient to detect any
+        // relevant modification without touching content bytes.
+        var sb = new System.Text.StringBuilder();
+        foreach (var info in entries.OrderBy(e => e.Path, StringComparer.Ordinal))
+        {
+            sb.Append(info.Path).Append(':').Append(info.Sha).Append('\n');
+        }
+        return sb.ToString();
     }
 }

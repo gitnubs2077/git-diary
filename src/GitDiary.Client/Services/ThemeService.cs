@@ -132,6 +132,17 @@ public sealed class ThemeService : StoreBase, IDisposable
 
     public void Dispose()
     {
+        // Detach the OS-theme media-query listener before releasing the .NET ref.
+        // Without this the JS side keeps a closure over `_selfRef` and the next
+        // OS-level theme flip invokes `OnSystemThemeChanged` on a disposed handle.
+        try
+        {
+            _ = _jsRuntime.InvokeVoidAsync("gitdiaryTheme.unwatchSystem");
+        }
+        catch
+        {
+            // JS side may already be gone (page teardown) — safe to swallow.
+        }
         _selfRef?.Dispose();
         _selfRef = null;
     }

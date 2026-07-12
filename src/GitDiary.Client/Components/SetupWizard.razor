@@ -4,10 +4,10 @@
 @using System.Text.RegularExpressions
 @implements IDisposable
 
-<div class="setup-wizard">
+<div class="setup-wizard" @onkeydown="HandleWizardKey">
     <div class="setup-card">
         <div class="setup-header">
-            <h1>📔 GitDiary</h1>
+            <h1 id="settings-title">📔 GitDiary</h1>
             <p class="setup-subtitle">@EffectiveSubtitle</p>
         </div>
 
@@ -29,7 +29,8 @@
                     type="text"
                     placeholder="@L["setup.placeholderOwner"]"
                     value="@Owner"
-                    @oninput="OnOwnerInput" />
+                    @oninput="OnOwnerInput"
+                    @ref="_ownerRef" />
             </div>
 
             <div class="form-group">
@@ -72,7 +73,7 @@
             }
 
             <div class="form-actions">
-                <button class="btn-primary" @onclick="SaveConfigAsync" disabled="@(!IsFormValid)">
+                <button class="btn-primary" @onclick="SaveConfigAsync" disabled="@(!IsFormValid || _saveInFlight)">
                     @EffectiveButtonText
                 </button>
             </div>
@@ -134,6 +135,15 @@
     private string Token { get; set; } = "";
     private string? ErrorMessage { get; set; }
 
+    // Autofocus target: the first empty text input. Set by OnAfterRenderAsync
+    // on the first render only so re-renders during typing don't yank focus.
+    private ElementReference _ownerRef;
+    private bool _autofocusApplied;
+    // Prevents a rapid double-click on Save from firing two GetTree + write-test
+    // round-trips (the `disabled` attribute only becomes effective after the next
+    // render, which is too late during the two-second API round-trip window).
+    private bool _saveInFlight;
+
     private bool ShowCancel => ExistingConfig is not null;
 
     private bool IsFormValid =>
@@ -151,6 +161,33 @@
             Repo = ExistingConfig.Repo;
             Branch = ExistingConfig.Branch;
             Token = ExistingConfig.Token;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_autofocusApplied)
+        {
+            _autofocusApplied = true;
+            try
+            {
+                await _ownerRef.FocusAsync();
+            }
+            catch
+            {
+                // Ref not attached yet (unlikely on firstRender=true, but safe).
+            }
+        }
+    }
+
+    private async Task HandleWizardKey(KeyboardEventArgs e)
+    {
+        // Esc dismisses the wizard when running in settings-edit mode (i.e.,
+        // when a cancel action is available). In first-run mode there is
+        // nothing to cancel back to, so Esc is a no-op.
+        if (e.Key == "Escape" && ShowCancel)
+        {
+            await Cancel();
         }
     }
 
@@ -203,53 +240,62 @@
 
     private async Task SaveConfigAsync()
     {
-        ErrorMessage = null;
-
-        var config = new RepositoryConfig
-        {
-            Owner = Owner.Trim(),
-            Repo = Repo.Trim(),
-            Branch = string.IsNullOrWhiteSpace(Branch) ? "main" : Branch.Trim(),
-            Token = Token.Trim()
-        };
-
-        // Client-side format validation. GitHub enforces the real rules
-        // server-side, but catching obvious paste errors here gives a much
-        // clearer message than "HTTP 404 Not Found" from the API.
-        var validationError = ValidateConfig(config);
-        if (validationError is not null)
-        {
-            ErrorMessage = validationError;
-            return;
-        }
-
+        if (_saveInFlight) return;
+        _saveInFlight = true;
         try
         {
-            SettingsStore.SetConfig(config);
-            GitHubApi.SetConfig(config);
-            GitHubApi.SetToken(config.Token);
+            ErrorMessage = null;
 
-            // Test read access
-            var testResult = await GitHubApi.GetTreeAsync();
-            if (testResult.IsFailure)
+            var config = new RepositoryConfig
             {
-                ErrorMessage = L.Format("setup.errorCannotConnect", testResult.Error ?? "");
+                Owner = Owner.Trim(),
+                Repo = Repo.Trim(),
+                Branch = string.IsNullOrWhiteSpace(Branch) ? "main" : Branch.Trim(),
+                Token = Token.Trim()
+            };
+
+            // Client-side format validation. GitHub enforces the real rules
+            // server-side, but catching obvious paste errors here gives a much
+            // clearer message than "HTTP 404 Not Found" from the API.
+            var validationError = ValidateConfig(config);
+            if (validationError is not null)
+            {
+                ErrorMessage = validationError;
                 return;
             }
 
-            // Test write access
-            var writeTest = await GitHubApi.TestWriteAccessAsync();
-            if (writeTest.IsFailure)
+            try
             {
-                ErrorMessage = L["setup.errorNoWrite"];
-                return;
-            }
+                SettingsStore.SetConfig(config);
+                GitHubApi.SetConfig(config);
+                GitHubApi.SetToken(config.Token);
 
-            await ConfigSaved.InvokeAsync();
+                // Test read access
+                var testResult = await GitHubApi.GetTreeAsync();
+                if (testResult.IsFailure)
+                {
+                    ErrorMessage = L.Format("setup.errorCannotConnect", testResult.Error ?? "");
+                    return;
+                }
+
+                // Test write access
+                var writeTest = await GitHubApi.TestWriteAccessAsync();
+                if (writeTest.IsFailure)
+                {
+                    ErrorMessage = L["setup.errorNoWrite"];
+                    return;
+                }
+
+                await ConfigSaved.InvokeAsync();
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = L.Format("setup.errorConnection", ex.Message);
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            ErrorMessage = L.Format("setup.errorConnection", ex.Message);
+            _saveInFlight = false;
         }
     }
 

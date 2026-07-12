@@ -21,16 +21,18 @@ public sealed class SearchService
         if (string.IsNullOrWhiteSpace(keyword))
             return new List<DiaryEntry>();
 
-        var keywordLower = keyword.ToLowerInvariant();
+        // `Contains(..., StringComparison.OrdinalIgnoreCase)` does its own culture-
+        // insensitive case folding, so pre-lowercasing the keyword and the entire
+        // content is dead work — the second copy of a large diary body is a real
+        // GC pressure on repos with hundreds of entries.
         var results = new List<DiaryEntry>();
 
         foreach (var entry in _index.Values)
         {
             var title = PathHelper.GetTitle(entry.Date);
-            var content = entry.Content.ToLowerInvariant();
 
-            if (title.Contains(keywordLower, StringComparison.OrdinalIgnoreCase) ||
-                content.Contains(keywordLower, StringComparison.OrdinalIgnoreCase))
+            if (title.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                entry.Content.Contains(keyword, StringComparison.OrdinalIgnoreCase))
             {
                 results.Add(entry);
             }

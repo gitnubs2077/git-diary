@@ -1,5 +1,18 @@
 /* GitDiary - Custom Styles */
 
+/* Keyboard-focus visibility. Every interactive role="button"/role="option"
+   element in the sidebar and search results is styled as a plain div; without
+   an explicit focus ring, tab-through navigation is invisible. :focus-visible
+   restricts the ring to keyboard traversal so mouse clicks don't leave a
+   halo behind. */
+[role="button"]:focus-visible,
+[role="option"]:focus-visible,
+.diary-entry-item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: 4px;
+}
+
 :root {
     --sidebar-width: 350px;
 

@@ -69,9 +69,11 @@ public sealed class OnlineSyncCoordinator : IAsyncDisposable
             // Pull fresh SHAs / entry list after commits so the UI reflects the new state.
             await _store.RefreshEntriesAsync();
         }
-        catch
+        catch (Exception ex)
         {
             // Best-effort background sync — per-entry failures surface via SyncStateChanged.
+            // Log the outer wrapper failure at Error so unexplained silence has a trail.
+            Console.Error.WriteLine($"[GitDiary] OnlineSyncCoordinator.RunSyncAsync: {ex.GetType().Name}: {ex.Message}");
         }
         finally
         {

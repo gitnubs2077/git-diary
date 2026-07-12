@@ -17,14 +17,19 @@
 
     @if (SearchResults is not null && SearchResults.Any())
     {
-        <div class="search-results">
+        <div class="search-results" role="listbox" aria-label="@L["search.placeholder"]">
             <div class="search-results-header">
                 @L.Format("search.found", SearchResults.Count)
-                <button class="btn-close-results" @onclick="ClearSearch">✕</button>
+                <button class="btn-close-results" @onclick="ClearSearch" aria-label="@L["editor.cancel"]">✕</button>
             </div>
             @foreach (var result in SearchResults)
             {
-                <div class="search-result-item" @onclick="() => SelectResult(result.Date)">
+                <div class="search-result-item"
+                     role="option"
+                     tabindex="0"
+                     aria-selected="false"
+                     @onclick="() => SelectResult(result.Date)"
+                     @onkeydown="e => OnResultKey(e, result.Date)">
                     <div class="result-date">@result.Date.ToString("yyyy-MM-dd")</div>
                     <div class="result-preview">@GetPreview(result.Content)</div>
                 </div>
@@ -102,6 +107,21 @@
         await DiaryStore.LoadEntryAsync(date);
         await OnEntrySelected.InvokeAsync(date);
         ClearSearch();
+    }
+
+    // Enter / Space on a role="option" row selects the entry. Esc collapses
+    // the results panel back to the input.
+    private Task OnResultKey(KeyboardEventArgs e, DateOnly date)
+    {
+        if (e.Key == "Enter" || e.Key == " " || e.Key == "Spacebar")
+        {
+            return SelectResult(date);
+        }
+        if (e.Key == "Escape")
+        {
+            ClearSearch();
+        }
+        return Task.CompletedTask;
     }
 
     private void ClearSearch()

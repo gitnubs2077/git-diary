@@ -12,7 +12,13 @@
 }
 else if (ShowSettings)
 {
-    <div class="settings-overlay" @onclick="CloseSettings">
+    <div class="settings-overlay"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="settings-title"
+         tabindex="-1"
+         @onclick="CloseSettings"
+         @onkeydown="HandleSettingsOverlayKey">
         <div class="settings-container" @onclick:stopPropagation="true">
             <SetupWizard
                 ExistingConfig="SettingsStore.Config"
@@ -98,13 +104,14 @@ else
         _onDiaryStateChanged = () => _ = PushDirtyFlagAsync();
         DiaryStore.StateChanged += _onDiaryStateChanged;
 
-        // Load config from localStorage
+        // Load config from localStorage. These keys legitimately return `null`
+        // on first run — hence `<string?>` and the explicit null checks below.
         try
         {
-            var owner = await JsRuntime.InvokeAsync<string>("localStorage.getItem", "gitdiary_owner");
-            var repo = await JsRuntime.InvokeAsync<string>("localStorage.getItem", "gitdiary_repo");
-            var branch = await JsRuntime.InvokeAsync<string>("localStorage.getItem", "gitdiary_branch");
-            var token = await JsRuntime.InvokeAsync<string>("localStorage.getItem", "gitdiary_token");
+            var owner = await JsRuntime.InvokeAsync<string?>("localStorage.getItem", "gitdiary_owner");
+            var repo = await JsRuntime.InvokeAsync<string?>("localStorage.getItem", "gitdiary_repo");
+            var branch = await JsRuntime.InvokeAsync<string?>("localStorage.getItem", "gitdiary_branch");
+            var token = await JsRuntime.InvokeAsync<string?>("localStorage.getItem", "gitdiary_token");
 
             if (!string.IsNullOrEmpty(owner) && !string.IsNullOrEmpty(repo) && !string.IsNullOrEmpty(token))
             {
@@ -283,6 +290,17 @@ else
     private void CloseSettings()
     {
         ShowSettings = false;
+    }
+
+    private void HandleSettingsOverlayKey(KeyboardEventArgs e)
+    {
+        // Esc dismisses the settings overlay — the SetupWizard inside handles
+        // its own Esc too, but we listen here as a safety net in case focus
+        // has escaped into the overlay backdrop.
+        if (e.Key == "Escape")
+        {
+            CloseSettings();
+        }
     }
 
     private async Task OnConfigSaved()

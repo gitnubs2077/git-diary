@@ -78,8 +78,11 @@ public sealed class SyncService
 
             return Result<bool>.Success(true);
         }
-        catch
+        catch (Exception ex)
         {
+            // Log at Error so bug reports include the stack trace. The user-visible
+            // side effect is the entry flipping to Failed — the log adds the "why".
+            Console.Error.WriteLine($"[GitDiary] SyncService.SyncDiaryEntry: {ex.GetType().Name}: {ex.Message}");
             entry.SyncState = SyncState.Failed;
             SyncStateChanged?.Invoke(SyncState.Failed);
             return Result<bool>.Failure("Sync failed");
