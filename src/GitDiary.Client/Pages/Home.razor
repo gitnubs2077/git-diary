@@ -29,6 +29,7 @@ else
                 OnEntrySelected="OnEntrySelected"
                 OnSettingsClicked="OpenSettings" />
         </div>
+        <div class="app-resizer" @ref="_resizerRef" title="Drag to resize · double-click to reset"></div>
         <div class="app-main">
             <div class="app-toolbar">
                 <SearchBox OnEntrySelected="OnEntrySelected" />
@@ -58,6 +59,8 @@ else
 
     private DateOnly? CurrentDate { get; set; }
     private bool ShowSettings { get; set; }
+    private ElementReference _resizerRef;
+    private bool _resizerAttached;
 
     protected override async Task OnInitializedAsync()
     {
@@ -100,6 +103,30 @@ else
     {
         CurrentDate = date;
         await DiaryStore.LoadEntryAsync(date);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // The resizer element only exists when the main app-layout branch is
+        // rendered (not the setup wizard / settings overlay). Re-attach whenever
+        // that branch mounts — `attachResizer` is idempotent per element.
+        var mounted = SettingsStore.IsConfigured && !ShowSettings;
+        if (mounted && !_resizerAttached)
+        {
+            _resizerAttached = true;
+            try
+            {
+                await JsRuntime.InvokeVoidAsync("gitdiarySidebar.attachResizer", _resizerRef);
+            }
+            catch
+            {
+                _resizerAttached = false;
+            }
+        }
+        else if (!mounted && _resizerAttached)
+        {
+            _resizerAttached = false;
+        }
     }
 
     private void OpenSettings()

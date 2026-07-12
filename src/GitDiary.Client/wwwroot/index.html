@@ -47,6 +47,83 @@
                     }
                 }
             };
+
+            // Sidebar width boot + drag interop. Apply persisted width before first
+            // paint so the layout doesn't flash from the CSS default (280px) to the
+            // user's saved value.
+            const SIDEBAR_MIN = 180;
+            const SIDEBAR_MAX = 560;
+            const SIDEBAR_DEFAULT = 350;
+            const SIDEBAR_KEY = 'gitdiary_sidebar_width';
+
+            function readSidebarWidth() {
+                const cs = getComputedStyle(html).getPropertyValue('--sidebar-width');
+                const w = parseInt(cs, 10);
+                return isNaN(w) ? SIDEBAR_DEFAULT : w;
+            }
+            function clampSidebar(v) {
+                return Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, v));
+            }
+
+            try {
+                const storedW = localStorage.getItem(SIDEBAR_KEY);
+                if (storedW !== null) {
+                    const w = parseInt(storedW, 10);
+                    if (!isNaN(w)) {
+                        html.style.setProperty('--sidebar-width', clampSidebar(w) + 'px');
+                    }
+                }
+            } catch (_) { /* ignore */ }
+
+            window.gitdiarySidebar = {
+                MIN: SIDEBAR_MIN,
+                MAX: SIDEBAR_MAX,
+                DEFAULT: SIDEBAR_DEFAULT,
+                attachResizer: function (handle) {
+                    if (!handle || handle._gdAttached) return;
+                    handle._gdAttached = true;
+
+                    let dragging = false;
+                    let startX = 0;
+                    let startW = 0;
+
+                    handle.addEventListener('pointerdown', function (e) {
+                        if (e.pointerType === 'mouse' && e.button !== 0) return;
+                        dragging = true;
+                        startX = e.clientX;
+                        startW = readSidebarWidth();
+                        try { handle.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+                        document.body.style.cursor = 'col-resize';
+                        document.body.style.userSelect = 'none';
+                        handle.classList.add('is-dragging');
+                        e.preventDefault();
+                    });
+
+                    handle.addEventListener('pointermove', function (e) {
+                        if (!dragging) return;
+                        const w = clampSidebar(startW + (e.clientX - startX));
+                        html.style.setProperty('--sidebar-width', w + 'px');
+                    });
+
+                    function endDrag(e) {
+                        if (!dragging) return;
+                        dragging = false;
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                        handle.classList.remove('is-dragging');
+                        try { handle.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+                        try { localStorage.setItem(SIDEBAR_KEY, String(readSidebarWidth())); } catch (_) { /* ignore */ }
+                    }
+                    handle.addEventListener('pointerup', endDrag);
+                    handle.addEventListener('pointercancel', endDrag);
+
+                    // Double-click resets to the default width.
+                    handle.addEventListener('dblclick', function () {
+                        html.style.setProperty('--sidebar-width', SIDEBAR_DEFAULT + 'px');
+                        try { localStorage.setItem(SIDEBAR_KEY, String(SIDEBAR_DEFAULT)); } catch (_) { /* ignore */ }
+                    });
+                }
+            };
         })();
     </script>
 </head>

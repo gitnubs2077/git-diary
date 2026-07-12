@@ -1,7 +1,7 @@
 /* GitDiary - Custom Styles */
 
 :root {
-    --sidebar-width: 280px;
+    --sidebar-width: 350px;
 
     /* Dark palette (default before the boot script sets [data-theme]) */
     --bg-primary: #1a1b2e;
@@ -95,6 +95,32 @@ html, body {
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
+    /* Enables container queries below so the header adapts to the sidebar's
+       actual width — not the viewport. */
+    container-type: inline-size;
+    container-name: sidebar;
+}
+
+.app-resizer {
+    width: 4px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+    transition: background 0.15s ease;
+    /* Expand hit area without visually widening the divider. */
+    margin: 0 -2px;
+    border-left: 2px solid transparent;
+    border-right: 2px solid transparent;
+    background-clip: padding-box;
+    touch-action: none;
+    user-select: none;
+}
+
+.app-resizer:hover,
+.app-resizer.is-dragging {
+    background-color: var(--accent);
 }
 
 .app-main {
@@ -131,8 +157,10 @@ html, body {
 .sidebar-header {
     padding: 16px;
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
+    gap: 8px 12px;
     border-bottom: 1px solid var(--border);
 }
 
@@ -141,6 +169,7 @@ html, body {
     align-items: center;
     gap: 8px;
     min-width: 0;
+    flex: 1 1 auto;
 }
 
 .sidebar-logo {
@@ -154,6 +183,10 @@ html, body {
     display: flex;
     align-items: center;
     gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    /* When the header wraps to a second line, keep actions right-aligned. */
+    margin-left: auto;
 }
 
 .btn-icon {
@@ -325,6 +358,45 @@ html, body {
     text-align: center;
     color: var(--text-muted);
     font-size: 13px;
+}
+
+/* Sidebar container-query adaptations. Trigger off the sidebar's own width
+   (declared via `container-type: inline-size` on .app-sidebar) so header
+   controls degrade gracefully when the user drags the resizer narrow. */
+@container sidebar (max-width: 340px) {
+    .sidebar-lang {
+        max-width: 96px;
+    }
+}
+
+@container sidebar (max-width: 300px) {
+    /* Hide the "📅 Diary" text label — the SVG logo alone identifies the app. */
+    .sidebar-header h3 {
+        display: none;
+    }
+    .sidebar-lang {
+        max-width: 80px;
+        padding: 3px 4px;
+        font-size: 11px;
+    }
+    .btn-new {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+}
+
+@container sidebar (max-width: 240px) {
+    /* Very narrow: shrink to essentials. The header will naturally wrap the
+       actions row below the brand thanks to `flex-wrap: wrap` above. */
+    .sidebar-header {
+        padding: 12px;
+    }
+    .sidebar-header-actions {
+        gap: 4px;
+    }
+    .sidebar-lang {
+        max-width: 68px;
+    }
 }
 
 /* ===== Editor ===== */
