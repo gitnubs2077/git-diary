@@ -9,8 +9,9 @@
     <link rel="preload" id="webassembly" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="alternate icon" type="image/png" href="favicon.png" />
-    <link rel="apple-touch-icon" href="icon-192.png" />
+    <link rel="apple-touch-icon" href="favicon.svg" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#7c6fff" />
     <link href="GitDiary.Client.styles.css" rel="stylesheet" />
     <script type="importmap"></script>
     <script>
@@ -143,6 +144,15 @@
         <span class="dismiss">🗙</span>
     </div>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+    <script>
+        // Register the PWA service worker after first paint so it never competes
+        // with the WASM boot for bandwidth. Fails silently on unsupported UAs.
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('service-worker.js').catch(function () { /* ignore */ });
+            });
+        }
+    </script>
 </body>
 
 </html>

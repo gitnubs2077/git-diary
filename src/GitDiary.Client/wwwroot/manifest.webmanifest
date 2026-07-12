@@ -1,0 +1,20 @@
+{
+  "name": "GitDiary",
+  "short_name": "GitDiary",
+  "description": "A personal diary that stores Markdown entries in your own GitHub repository.",
+  "id": "/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1a1b2e",
+  "theme_color": "#7c6fff",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}
