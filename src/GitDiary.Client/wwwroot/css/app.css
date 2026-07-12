@@ -630,6 +630,30 @@ html, body {
     text-decoration: underline;
 }
 
+/* Mermaid preview: centre the SVG and give render errors a visible surface
+   without breaking the surrounding markdown flow. */
+.markdown-body .mermaid {
+    display: flex;
+    justify-content: center;
+    margin: 12px 0;
+    overflow-x: auto;
+}
+.markdown-body .mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+.markdown-body .mermaid-error {
+    color: #f66;
+    border: 1px solid #f66;
+    background: rgba(255, 102, 102, 0.08);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    margin: 12px 0;
+}
+
 /* ===== Status Bar ===== */
 .status-bar {
     padding: 8px 16px;

@@ -44,7 +44,7 @@
             }
             else
             {
-                <div class="editor-preview markdown-body">
+                <div class="editor-preview markdown-body" @ref="_previewRef">
                     @MarkdownContent
                 </div>
             }
@@ -98,11 +98,23 @@
     [Inject]
     private LocalizationService L { get; set; } = default!;
 
+    [Inject]
+    private ThemeService ThemeSvc { get; set; } = default!;
+
+    [Inject]
+    private IJSRuntime JS { get; set; } = default!;
+
     private bool ShowPreview;
     private bool ShowDeleteConfirm;
     private ElementReference _deleteDialogRef;
     private ElementReference _deleteConfirmRef;
+    private ElementReference _previewRef;
     private bool _focusDeleteConfirm;
+    // Tracks the (content, theme) tuple that was last handed to the mermaid
+    // interop so we don't re-invoke JS on every unrelated re-render. Null
+    // signals "preview is not currently mounted".
+    private string? _lastMermaidContent;
+    private string? _lastMermaidTheme;
     // In-flight guards. `disabled="@..."` only takes effect after Blazor re-renders,
     // and a rapid double-click can re-enter the click handler before that render
     // completes — firing two GitHub round-trips in a row. These flags short-circuit
@@ -137,6 +149,15 @@
     {
         DiaryStore.StateChanged += HandleStoreChanged;
         L.StateChanged += HandleStoreChanged;
+        ThemeSvc.StateChanged += HandleThemeChanged;
+    }
+
+    private void HandleThemeChanged()
+    {
+        // Force the next OnAfterRenderAsync to re-run mermaid so live diagrams
+        // pick up the new theme. Cheap: no-ops when preview is not visible.
+        _lastMermaidTheme = null;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private async void HandleStoreChanged()
@@ -301,6 +322,39 @@
                 // Element not yet in DOM — safe to skip.
             }
         }
+
+        await RenderMermaidIfNeededAsync();
+    }
+
+    private async Task RenderMermaidIfNeededAsync()
+    {
+        if (!ShowPreview)
+        {
+            // Preview is not in the DOM; clear tracking so the next open re-invokes.
+            _lastMermaidContent = null;
+            _lastMermaidTheme = null;
+            return;
+        }
+
+        var content = DiaryStore.CurrentContent ?? string.Empty;
+        var theme = ThemeSvc.ResolvedTheme.Code();
+        if (_lastMermaidContent == content && _lastMermaidTheme == theme)
+        {
+            return;
+        }
+
+        _lastMermaidContent = content;
+        _lastMermaidTheme = theme;
+        try
+        {
+            await JS.InvokeVoidAsync("gitdiaryMermaid.render", _previewRef, theme);
+        }
+        catch (Exception ex)
+        {
+            // Interop failure must never break the editor. The preview HTML is
+            // already visible; the mermaid blocks just stay as raw code fences.
+            Console.Error.WriteLine($"[GitDiary] DiaryEditor.RenderMermaid: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private async Task DeleteAsync()
@@ -412,6 +466,7 @@
     {
         DiaryStore.StateChanged -= HandleStoreChanged;
         L.StateChanged -= HandleStoreChanged;
+        ThemeSvc.StateChanged -= HandleThemeChanged;
         CancelDebounce();
     }
 }
