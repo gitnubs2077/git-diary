@@ -813,3 +813,28 @@ GitHub API 通过接口 Mock，不依赖真实网络。
 8. Simplicity over features.
 9. Minimize dependencies.
 10. Long-term maintainability over short-term convenience.
+
+---
+
+# 28. Deliberate deferrals (v1.0)
+
+The v1.0 release audit flagged three optimisations that were **intentionally
+deferred** because current profiling doesn't show them mattering yet. Documenting
+them here so a future maintainer doesn't rediscover the same conclusions.
+
+- **PERF-1 — Cache search-tree SHA.** `SearchService` currently rebuilds its
+  in-memory index from the Git tree on every startup. For repositories under a
+  few hundred entries this is dominated by network latency, not CPU; caching the
+  tree SHA to skip the rebuild only pays off past ~1k entries. Revisit when a
+  real user complains about cold-start search delay.
+- **PERF-2 — Per-path IndexedDB keys.** Draft storage is currently a single
+  in-memory dictionary flushed as one JSON blob. Splitting to one IndexedDB
+  key per path only matters when there are many concurrent drafts, which the
+  daily-entry model actively discourages.
+- **PERF-4 — `ShouldRender` fingerprinting.** Blazor's default render loop
+  already coalesces via `StateHasChanged`; measured render times are well under
+  the 16 ms budget on a modern laptop. Adding explicit fingerprints would trade
+  complexity for a benefit we can't currently observe.
+
+None of these are architectural mistakes — they are size- and load-scaling
+concerns. Add profiling data to the PR that implements any of them.

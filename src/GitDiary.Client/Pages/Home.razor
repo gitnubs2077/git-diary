@@ -1,5 +1,6 @@
 @page "/"
 @using GitDiary.Client.Components
+@using GitDiary.Client.Services
 @using GitDiary.Client.Stores
 @using GitDiary.Client.Infrastructure
 @using GitDiary.Client.Models
@@ -29,7 +30,7 @@ else
                 OnEntrySelected="OnEntrySelected"
                 OnSettingsClicked="OpenSettings" />
         </div>
-        <div class="app-resizer" @ref="_resizerRef" title="Drag to resize · double-click to reset"></div>
+        <div class="app-resizer" @ref="_resizerRef" title="@L["home.resizerTooltip"]"></div>
         <div class="app-main">
             <div class="app-toolbar">
                 <SearchBox OnEntrySelected="OnEntrySelected" />
@@ -38,7 +39,7 @@ else
                 <DiaryEditor />
             </div>
             <div class="app-statusbar">
-                <StatusBar />
+                <StatusBar IsOffline="_isOffline" />
             </div>
         </div>
     </div>
@@ -58,6 +59,9 @@ else
     private Services.OnlineSyncCoordinator OnlineSync { get; set; } = default!;
 
     [Inject]
+    private LocalizationService L { get; set; } = default!;
+
+    [Inject]
     private IJSRuntime JsRuntime { get; set; } = default!;
 
     private DateOnly? CurrentDate { get; set; }
@@ -70,10 +74,29 @@ else
     // instance against the singleton SettingsStore.
     private Action? _onSettingsChanged;
 
+    // Global keyboard + beforeunload + reachability wiring is done via JS
+    // interop, hence a DotNetObjectReference must survive the entire page
+    // lifetime and be disposed in Dispose.
+    private DotNetObjectReference<Home>? _selfRef;
+    private bool _keysRegistered;
+    private bool _beforeUnloadInstalled;
+    private bool _netStatusSubscribed;
+    private bool _isOffline;
+    // Cache the last IsDirty value we pushed to JS so we don't spam the interop
+    // on unrelated StateChanged notifications.
+    private bool _lastPushedDirty;
+    private Action? _onDiaryStateChanged;
+
     protected override async Task OnInitializedAsync()
     {
         _onSettingsChanged = () => _ = InvokeAsync(StateHasChanged);
         SettingsStore.StateChanged += _onSettingsChanged;
+
+        // DiaryStore signals every time IsDirty or the entry list changes.
+        // We shadow-track IsDirty so JS can consult it synchronously during
+        // beforeunload. Fire-and-forget to keep the callback non-blocking.
+        _onDiaryStateChanged = () => _ = PushDirtyFlagAsync();
+        DiaryStore.StateChanged += _onDiaryStateChanged;
 
         // Load config from localStorage
         try
@@ -129,6 +152,53 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            _selfRef ??= DotNetObjectReference.Create(this);
+
+            // Global Ctrl/Cmd+S → SaveDraftAsync. Runs at window scope so it
+            // works no matter where focus lives (sidebar, search box, preview).
+            try
+            {
+                await JsRuntime.InvokeVoidAsync("gitdiaryKeys.register", _selfRef);
+                _keysRegistered = true;
+            }
+            catch
+            {
+                // JS bridge unavailable — Ctrl+S falls back to the browser default.
+            }
+
+            // Confirm-before-unload guard. The JS side reads a cached flag we
+            // update via PushDirtyFlagAsync whenever DiaryStore.StateChanged fires.
+            try
+            {
+                await JsRuntime.InvokeVoidAsync("gitdiaryDirty.install");
+                _beforeUnloadInstalled = true;
+                await PushDirtyFlagAsync();
+            }
+            catch
+            {
+                // beforeunload guard unavailable — accept the loss of protection.
+            }
+
+            // Reachability watcher for the offline banner in the status bar.
+            try
+            {
+                await JsRuntime.InvokeVoidAsync("gitdiaryNetStatus.subscribe", _selfRef);
+                _netStatusSubscribed = true;
+                var offline = await JsRuntime.InvokeAsync<bool>("gitdiaryNetStatus.isOffline");
+                if (offline != _isOffline)
+                {
+                    _isOffline = offline;
+                    StateHasChanged();
+                }
+            }
+            catch
+            {
+                // No net-status API — leave the banner hidden.
+            }
+        }
+
         // The resizer element only exists when the main app-layout branch is
         // rendered (not the setup wizard / settings overlay). Re-attach whenever
         // that branch mounts — `attachResizer` is idempotent per element.
@@ -148,6 +218,60 @@ else
         else if (!mounted && _resizerAttached)
         {
             _resizerAttached = false;
+        }
+    }
+
+    /// <summary>
+    /// Global Ctrl/Cmd+S entry point invoked from JS. Flushes the current draft
+    /// to IndexedDB when the editor has one, but never triggers a GitHub push —
+    /// commits stay a deliberate user action.
+    /// </summary>
+    [JSInvokable]
+    public async Task OnCtrlS()
+    {
+        if (DiaryStore.CurrentEntry is null) return;
+        if (!DiaryStore.IsDirty) return;
+        try
+        {
+            await DiaryStore.SaveDraftAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] Home.OnCtrlS failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>Invoked from JS when the browser reports it has come back online.</summary>
+    [JSInvokable]
+    public Task OnNetOnline()
+    {
+        if (!_isOffline) return Task.CompletedTask;
+        _isOffline = false;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Invoked from JS when the browser reports it has lost network access.</summary>
+    [JSInvokable]
+    public Task OnNetOffline()
+    {
+        if (_isOffline) return Task.CompletedTask;
+        _isOffline = true;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PushDirtyFlagAsync()
+    {
+        if (!_beforeUnloadInstalled) return;
+        var dirty = DiaryStore.IsDirty;
+        if (dirty == _lastPushedDirty) return;
+        _lastPushedDirty = dirty;
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("gitdiaryDirty.set", dirty);
+        }
+        catch
+        {
+            // Best-effort — a missed push just means the guard won't trigger.
         }
     }
 
@@ -203,5 +327,27 @@ else
             SettingsStore.StateChanged -= _onSettingsChanged;
             _onSettingsChanged = null;
         }
+        if (_onDiaryStateChanged is not null)
+        {
+            DiaryStore.StateChanged -= _onDiaryStateChanged;
+            _onDiaryStateChanged = null;
+        }
+
+        // Unregister JS-side listeners so their captured DotNetObjectReference
+        // isn't invoked after Dispose. Wrapped in try/catch because we may be
+        // tearing down inside a page unload where the JS side has already gone.
+        if (_keysRegistered)
+        {
+            try { _ = JsRuntime.InvokeVoidAsync("gitdiaryKeys.unregister"); } catch { }
+            _keysRegistered = false;
+        }
+        if (_netStatusSubscribed)
+        {
+            try { _ = JsRuntime.InvokeVoidAsync("gitdiaryNetStatus.unsubscribe"); } catch { }
+            _netStatusSubscribed = false;
+        }
+
+        _selfRef?.Dispose();
+        _selfRef = null;
     }
 }

@@ -76,6 +76,7 @@ public sealed class LocalizationService : StoreBase
         }
 
         CurrentLanguage = initial;
+        await SyncHtmlLangAsync(initial);
     }
 
     /// <summary>Persist and switch the active language, fetching its dictionary if needed.</summary>
@@ -91,6 +92,24 @@ public sealed class LocalizationService : StoreBase
             // Ignore — in-memory state still reflects the choice.
         }
         CurrentLanguage = language;
+        await SyncHtmlLangAsync(language);
+    }
+
+    /// <summary>
+    /// Push the active language code to <c>&lt;html lang&gt;</c> so screen readers,
+    /// spell-checkers, and search engines pick the right locale. Best-effort — a
+    /// missing JS helper (e.g. prerender) is not an error.
+    /// </summary>
+    private async Task SyncHtmlLangAsync(Language language)
+    {
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("gitdiaryLang.set", language.Code());
+        }
+        catch
+        {
+            // Not a hard failure.
+        }
     }
 
     /// <summary>Lookup by key with English fallback. Returns the key when nothing matches.</summary>

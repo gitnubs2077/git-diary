@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using GitDiary.Client.Infrastructure;
 using GitDiary.Client.Models;
 
@@ -18,6 +19,18 @@ public sealed class GitHubApiClient
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    // Defense-in-depth: strip anything that looks like a Bearer/token secret
+    // from strings we're about to log. GitHub's response bodies do not
+    // normally echo the Authorization header, but errors from proxies or
+    // future SDK bugs could — and console.error is world-readable via the
+    // browser devtools.
+    private static readonly Regex BearerPattern = new(
+        @"Bearer\s+[A-Za-z0-9_\-\.]+",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex TokenPattern = new(
+        @"gh[pousr]_[A-Za-z0-9]{20,}",
+        RegexOptions.Compiled);
 
     public GitHubApiClient(HttpClient httpClient)
     {
@@ -50,14 +63,44 @@ public sealed class GitHubApiClient
         return $"https://api.github.com/repos/{_config.Owner}/{_config.Repo}/{path}";
     }
 
+    private static string Redact(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        var redacted = BearerPattern.Replace(text, "Bearer <redacted>");
+        redacted = TokenPattern.Replace(redacted, "<redacted-token>");
+        return redacted;
+    }
+
+    /// <summary>
+    /// Writes full GitHub error diagnostics to console.error (redacted) and
+    /// returns the short, stable message that should be placed in
+    /// <see cref="Result{T}.Error"/> for UI/log surfaces. Keeps the noisy JSON
+    /// body out of the app's user-facing state.
+    /// </summary>
+    private static string LogAndFormatHttpError(
+        HttpMethod method, string url, System.Net.HttpStatusCode status, string? body)
+    {
+        var reason = status.ToString();
+        Console.Error.WriteLine(
+            $"[GitDiary] GitHub {method.Method} {url} -> {(int)status} {reason}: {Redact(body)}");
+        return $"HTTP {(int)status} {reason}";
+    }
+
+    private static string LogAndFormatException(string operation, Exception ex)
+    {
+        Console.Error.WriteLine(
+            $"[GitDiary] GitHub {operation} threw {ex.GetType().Name}: {Redact(ex.Message)}");
+        return $"{operation} failed";
+    }
+
     /// <summary>
     /// GET file content. Returns the file's SHA and UTF-8 decoded content.
     /// </summary>
     public async Task<Result<FileContent>> GetFileContentAsync(string path)
     {
+        var url = GetApiUrl($"contents/{path}");
         try
         {
-            var url = GetApiUrl($"contents/{path}");
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             ApplyAuth(request);
 
@@ -67,9 +110,8 @@ public sealed class GitHubApiClient
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                     return Result<FileContent>.Failure("NOT_FOUND", (int)response.StatusCode);
                 var errorBody = await response.Content.ReadAsStringAsync();
-                return Result<FileContent>.Failure(
-                    $"GitHub API error: {response.StatusCode} - {errorBody}",
-                    (int)response.StatusCode);
+                var msg = LogAndFormatHttpError(HttpMethod.Get, url, response.StatusCode, errorBody);
+                return Result<FileContent>.Failure(msg, (int)response.StatusCode);
             }
 
             var content = await response.Content.ReadAsStringAsync();
@@ -87,7 +129,7 @@ public sealed class GitHubApiClient
         }
         catch (Exception ex)
         {
-            return Result<FileContent>.Failure($"Failed to get file: {ex.Message}");
+            return Result<FileContent>.Failure(LogAndFormatException("Get file", ex));
         }
     }
 
@@ -96,9 +138,9 @@ public sealed class GitHubApiClient
     /// </summary>
     public async Task<Result<string>> PutFileAsync(string path, string content, string sha)
     {
+        var url = GetApiUrl($"contents/{path}");
         try
         {
-            var url = GetApiUrl($"contents/{path}");
             var base64Content = Convert.ToBase64String(Encoding.UTF8.GetBytes(content));
 
             var body = new
@@ -120,9 +162,8 @@ public sealed class GitHubApiClient
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync();
-                return Result<string>.Failure(
-                    $"GitHub API error: {response.StatusCode} - {errorBody}",
-                    (int)response.StatusCode);
+                var msg = LogAndFormatHttpError(HttpMethod.Put, url, response.StatusCode, errorBody);
+                return Result<string>.Failure(msg, (int)response.StatusCode);
             }
 
             var responseBody = await response.Content.ReadAsStringAsync();
@@ -133,7 +174,7 @@ public sealed class GitHubApiClient
         }
         catch (Exception ex)
         {
-            return Result<string>.Failure($"Failed to save file: {ex.Message}");
+            return Result<string>.Failure(LogAndFormatException("Save file", ex));
         }
     }
 
@@ -142,9 +183,9 @@ public sealed class GitHubApiClient
     /// </summary>
     public async Task<Result<bool>> DeleteFileAsync(string path, string sha)
     {
+        var url = GetApiUrl($"contents/{path}");
         try
         {
-            var url = GetApiUrl($"contents/{path}");
             var body = new
             {
                 message = $"Delete diary {path}",
@@ -163,16 +204,15 @@ public sealed class GitHubApiClient
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync();
-                return Result<bool>.Failure(
-                    $"GitHub API error: {response.StatusCode} - {errorBody}",
-                    (int)response.StatusCode);
+                var msg = LogAndFormatHttpError(HttpMethod.Delete, url, response.StatusCode, errorBody);
+                return Result<bool>.Failure(msg, (int)response.StatusCode);
             }
 
             return Result<bool>.Success(true);
         }
         catch (Exception ex)
         {
-            return Result<bool>.Failure($"Failed to delete file: {ex.Message}");
+            return Result<bool>.Failure(LogAndFormatException("Delete file", ex));
         }
     }
 
@@ -181,9 +221,9 @@ public sealed class GitHubApiClient
     /// </summary>
     public async Task<Result<List<TreeNode>>> GetTreeAsync()
     {
+        var url = GetApiUrl($"git/trees/{_config?.Branch ?? "main"}?recursive=1");
         try
         {
-            var url = GetApiUrl($"git/trees/{_config?.Branch ?? "main"}?recursive=1");
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             ApplyAuth(request);
 
@@ -200,9 +240,8 @@ public sealed class GitHubApiClient
                     return Result<List<TreeNode>>.Success(new List<TreeNode>());
                 }
 
-                return Result<List<TreeNode>>.Failure(
-                    $"GitHub API error: {response.StatusCode} - {errorBody}",
-                    (int)response.StatusCode);
+                var msg = LogAndFormatHttpError(HttpMethod.Get, url, response.StatusCode, errorBody);
+                return Result<List<TreeNode>>.Failure(msg, (int)response.StatusCode);
             }
 
             var content = await response.Content.ReadAsStringAsync();
@@ -243,7 +282,7 @@ public sealed class GitHubApiClient
         }
         catch (Exception ex)
         {
-            return Result<List<TreeNode>>.Failure($"Failed to get tree: {ex.Message}");
+            return Result<List<TreeNode>>.Failure(LogAndFormatException("Get tree", ex));
         }
     }
 
@@ -252,9 +291,9 @@ public sealed class GitHubApiClient
     /// </summary>
     public async Task<Result<string>> CreateFileAsync(string path, string content)
     {
+        var url = GetApiUrl($"contents/{path}");
         try
         {
-            var url = GetApiUrl($"contents/{path}");
             var base64Content = Convert.ToBase64String(Encoding.UTF8.GetBytes(content));
 
             var body = new
@@ -275,9 +314,8 @@ public sealed class GitHubApiClient
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync();
-                return Result<string>.Failure(
-                    $"GitHub API error: {response.StatusCode} - {errorBody}",
-                    (int)response.StatusCode);
+                var msg = LogAndFormatHttpError(HttpMethod.Put, url, response.StatusCode, errorBody);
+                return Result<string>.Failure(msg, (int)response.StatusCode);
             }
 
             var responseBody = await response.Content.ReadAsStringAsync();
@@ -288,31 +326,30 @@ public sealed class GitHubApiClient
         }
         catch (Exception ex)
         {
-            return Result<string>.Failure($"Failed to create file: {ex.Message}");
+            return Result<string>.Failure(LogAndFormatException("Create file", ex));
         }
     }
 
     /// <summary>
-    /// Test write access by creating and deleting a temp file.
+    /// Test write access by creating and deleting a temp file. The probe lives
+    /// inside <c>Diary/</c> (not the repo root) and is name-randomized to avoid
+    /// (a) polluting the user's top-level tree with a stray <c>.gitdiary-test</c>
+    /// artefact if a network hiccup interrupts cleanup, and (b) colliding with
+    /// a parallel setup attempt from a second tab.
     /// </summary>
     public async Task<Result<bool>> TestWriteAccessAsync()
     {
-        var testPath = ".gitdiary-test";
+        var testPath = $"Diary/.gitdiary-test-{Guid.NewGuid():N}.md";
         try
         {
-            // Try to clean up any leftover test file first
-            var existing = await GetFileContentAsync(testPath);
-            if (existing.IsSuccess && existing.Value is not null)
-            {
-                await DeleteFileAsync(testPath, existing.Value.Sha);
-            }
-
-            // Create test file — if this succeeds, write works
-            var result = await CreateFileAsync(testPath, "ok");
+            // Create test file — if this succeeds, write works.
+            var result = await CreateFileAsync(testPath, "GitDiary write-access probe. Safe to delete.");
             if (result.IsFailure)
                 return Result<bool>.Failure(result.Error!, result.StatusCode);
 
-            // Clean up using the SHA from the create response
+            // Best-effort clean up using the SHA from the create response. If
+            // the delete fails (transient network) the file is still harmless:
+            // it's a random-suffixed marker file that the user can remove later.
             if (!string.IsNullOrEmpty(result.Value))
             {
                 await DeleteFileAsync(testPath, result.Value);
@@ -322,7 +359,7 @@ public sealed class GitHubApiClient
         }
         catch (Exception ex)
         {
-            return Result<bool>.Failure($"Write test failed: {ex.Message}");
+            return Result<bool>.Failure(LogAndFormatException("Write test", ex));
         }
     }
 }

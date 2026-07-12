@@ -6,6 +6,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
+    <!--
+      Zero-warning policy: the audit gate expects `dotnet build` to fail on
+      warnings so subtle regressions (nullability, obsolete APIs, unused
+      usings) don't sneak in silently between releases.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

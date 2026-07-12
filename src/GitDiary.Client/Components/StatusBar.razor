@@ -37,6 +37,14 @@
         }
     </div>
     <div class="status-right">
+        @if (IsOffline)
+        {
+            <span class="status-offline" role="status">📶 @L["status.offline"]</span>
+        }
+        @if (DiaryStore.CurrentEntry is not null)
+        {
+            <span class="status-wordcount">@L.Format("status.words", CountWords(DiaryStore.CurrentContent))</span>
+        }
         <span class="status-entries">@L.Format("status.entries", DiaryStore.Entries.Count)</span>
     </div>
 </div>
@@ -50,6 +58,23 @@
 
     [Parameter]
     public string? StatusMessage { get; set; }
+
+    [Parameter]
+    public bool IsOffline { get; set; }
+
+    /// <summary>
+    /// Rough word count for the status bar. Splits on whitespace, tolerating any
+    /// stretch of runs (spaces, tabs, newlines). Not a linguistic word count for
+    /// CJK — for those scripts it effectively becomes a "space-delimited run"
+    /// count, which still tracks writing progress meaningfully.
+    /// </summary>
+    private static int CountWords(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return 0;
+        return content.Split(WhitespaceChars, StringSplitOptions.RemoveEmptyEntries).Length;
+    }
+
+    private static readonly char[] WhitespaceChars = { ' ', '\t', '\r', '\n', '\f', '\v' };
 
     protected override void OnInitialized()
     {

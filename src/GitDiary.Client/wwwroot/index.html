@@ -159,6 +159,101 @@
                 },
                 isOnline: function () { return navigator.onLine !== false; }
             };
+
+            // Global Ctrl/Cmd+S interceptor. Runs at the document level so the
+            // shortcut works no matter which element has focus — the sidebar,
+            // the search box, the preview pane, or the editor textarea itself.
+            // preventDefault stops the browser's Save-As dialog. Registered
+            // once from Home.OnAfterRenderAsync via a DotNetObjectReference.
+            window.gitdiaryKeys = {
+                _handler: null,
+                _ref: null,
+                register: function (dotNetRef) {
+                    if (this._handler) return;
+                    this._ref = dotNetRef;
+                    const self = this;
+                    this._handler = function (e) {
+                        const isS = e.key === 's' || e.key === 'S';
+                        if (isS && (e.ctrlKey || e.metaKey) && !e.altKey) {
+                            e.preventDefault();
+                            try { self._ref && self._ref.invokeMethodAsync('OnCtrlS'); }
+                            catch (_) { /* ignore */ }
+                        }
+                    };
+                    window.addEventListener('keydown', this._handler);
+                },
+                unregister: function () {
+                    if (this._handler) {
+                        window.removeEventListener('keydown', this._handler);
+                        this._handler = null;
+                        this._ref = null;
+                    }
+                }
+            };
+
+            // beforeunload guard. .NET pushes the current dirty state whenever
+            // it changes; the handler consults the cached flag synchronously
+            // (beforeunload is not allowed to await). A blank returnValue is
+            // enough to trigger every modern browser's generic prompt.
+            window.gitdiaryDirty = {
+                _dirty: false,
+                _installed: false,
+                set: function (v) { this._dirty = !!v; },
+                install: function () {
+                    if (this._installed) return;
+                    this._installed = true;
+                    const self = this;
+                    window.addEventListener('beforeunload', function (e) {
+                        if (!self._dirty) return;
+                        e.preventDefault();
+                        e.returnValue = '';
+                        return '';
+                    });
+                }
+            };
+
+            // Keep <html lang> in sync with the active UI language so screen
+            // readers, spell-checkers, and search engines get the right hint.
+            window.gitdiaryLang = {
+                set: function (code) {
+                    if (typeof code === 'string' && code.length > 0) {
+                        html.setAttribute('lang', code);
+                    }
+                }
+            };
+
+            // Reachability watcher for the UI-side offline banner. Distinct
+            // from gitdiaryOnline (which only listens for `online` to trigger
+            // draft sync); this one reports *both* directions so Home can flip
+            // an in-app banner. isOffline() is a synchronous startup probe.
+            window.gitdiaryNetStatus = {
+                _online: null,
+                _offline: null,
+                _ref: null,
+                subscribe: function (dotNetRef) {
+                    if (this._online || this._offline) return;
+                    this._ref = dotNetRef;
+                    const self = this;
+                    this._online = function () {
+                        try { self._ref && self._ref.invokeMethodAsync('OnNetOnline'); }
+                        catch (_) { /* ignore */ }
+                    };
+                    this._offline = function () {
+                        try { self._ref && self._ref.invokeMethodAsync('OnNetOffline'); }
+                        catch (_) { /* ignore */ }
+                    };
+                    window.addEventListener('online', this._online);
+                    window.addEventListener('offline', this._offline);
+                },
+                unsubscribe: function () {
+                    if (this._online) window.removeEventListener('online', this._online);
+                    if (this._offline) window.removeEventListener('offline', this._offline);
+                    this._online = null;
+                    this._offline = null;
+                    this._ref = null;
+                },
+                isOffline: function () { return navigator.onLine === false; }
+            };
         })();
     </script>
 </head>

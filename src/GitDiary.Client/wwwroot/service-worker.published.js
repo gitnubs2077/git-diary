@@ -30,12 +30,32 @@ const offlineNavigationFallback = 'index.html';
 
 async function onInstall() {
     // Fetch and cache all matching items from the manifest.
+    //
+    // We deliberately do NOT use cache.addAll: it has all-or-nothing semantics,
+    // so a single asset returning a 404 (or a hash mismatch triggering an
+    // integrity failure) aborts the entire install and leaves the user with
+    // *no* offline cache at all. Instead, walk the list with Promise.allSettled
+    // and add successful responses individually — any failures are logged but
+    // do not prevent the rest of the shell from being cached.
     const assetsRequests = self.assetsManifest.assets
         .filter(asset => offlineAssetsInclude.some(pattern => pattern.test(asset.url)))
         .filter(asset => !offlineAssetsExclude.some(pattern => pattern.test(asset.url)))
         .map(asset => new Request(asset.url, { integrity: asset.hash, cache: 'no-cache' }));
 
-    await caches.open(cacheName).then(cache => cache.addAll(assetsRequests));
+    const cache = await caches.open(cacheName);
+    const results = await Promise.allSettled(assetsRequests.map(async req => {
+        const response = await fetch(req);
+        if (!response || !response.ok) {
+            throw new Error(`Failed to fetch ${req.url}: ${response && response.status}`);
+        }
+        await cache.put(req, response);
+    }));
+
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length > 0) {
+        // Surface partial-install visibility for anyone opening DevTools.
+        console.warn(`[GitDiary SW] ${failed.length}/${results.length} assets failed to precache`, failed);
+    }
 }
 
 async function onActivate() {

@@ -353,6 +353,28 @@ html, body {
     color: white;
 }
 
+/* Today's entry gets a subtle left-border stripe + accent-tinted dot so it's
+   findable in a long list without stealing the selected-item styling. */
+.diary-entry-item.is-today {
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.diary-entry-item.is-today.selected {
+    color: white;
+}
+
+.diary-entry-item .today-badge {
+    display: inline-block;
+    margin-left: 6px;
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.diary-entry-item.is-today.selected .today-badge {
+    color: rgba(255, 255, 255, 0.9);
+}
+
 .sidebar-empty {
     padding: 32px 16px;
     text-align: center;
@@ -542,6 +564,14 @@ html, body {
     text-align: center;
 }
 
+/* Empty-state CTA — visually mirrors the "+ Today" sidebar button so users
+   recognize it as the same action. */
+.editor-empty .empty-cta {
+    margin-top: 20px;
+    padding: 10px 20px;
+    font-size: 14px;
+}
+
 /* ===== Markdown Preview ===== */
 .markdown-body {
     color: var(--text-primary);
@@ -612,6 +642,21 @@ html, body {
 .status-message { color: var(--text-muted); }
 
 .status-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+}
+
+/* Offline banner — status-bar right cluster. Uses the warning colour so it's
+   noticeable without stealing focus from Conflict/Failed which live on the
+   left cluster. */
+.status-offline {
+    color: var(--warning);
+    font-weight: 500;
+}
+
+.status-wordcount {
     color: var(--text-muted);
 }
 

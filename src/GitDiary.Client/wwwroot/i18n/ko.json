@@ -28,6 +28,7 @@
   "editor.deleteConfirm": "이 일기를 정말 삭제하시겠습니까?",
   "editor.cancel": "취소",
   "editor.confirmDelete": "삭제",
+  "editor.emptyCta": "오늘의 일기 쓰기",
 
   "setup.subtitleWelcome": "환영합니다! 일기를 설정해 봅시다.",
   "setup.subtitleUpdate": "GitHub 저장소 설정을 업데이트합니다.",
@@ -48,6 +49,9 @@
   "setup.errorCannotConnect": "저장소에 연결할 수 없습니다: {0}",
   "setup.errorNoWrite": "토큰에 쓰기 권한이 없습니다. Fine-Grained PAT에 'Contents: 읽기 및 쓰기' 권한이 있는지 확인하세요.",
   "setup.errorConnection": "연결 실패: {0}",
+  "setup.errorInvalidOwner": "소유자 이름 형식이 잘못되었습니다 (영숫자 또는 하이픈 1-39자).",
+  "setup.errorInvalidRepo": "저장소 이름 형식이 잘못되었습니다 (영숫자, 점, 밑줄, 하이픈 1-100자).",
+  "setup.errorInvalidToken": "토큰이 GitHub PAT 형식이 아닙니다. 'github_pat_…' 또는 'ghp_…'로 시작해야 합니다.",
   "setup.language": "언어",
 
   "search.placeholder": "일기 검색…",
@@ -59,5 +63,9 @@
   "status.conflict": "충돌 — 커밋 거부됨",
   "status.failed": "커밋 실패 — 초안은 로컬에 유지",
   "status.unsaved": "• 저장되지 않은 변경 사항",
-  "status.entries": "총 {0}개"
+  "status.entries": "총 {0}개",
+  "status.words": "{0} 단어",
+  "status.offline": "오프라인 — 변경 사항이 로컬에 대기 중",
+
+  "home.resizerTooltip": "드래그하여 너비 조정 · 더블 클릭으로 초기화"
 }

@@ -60,6 +60,9 @@
             <div class="empty-icon">📝</div>
             <h2>@L["editor.emptyTitle"]</h2>
             <p>@L["editor.emptyHint"]</p>
+            <button class="btn-new empty-cta" @onclick="OpenTodayEntryAsync">
+                @L["editor.emptyCta"]
+            </button>
         </div>
     }
 </div>
@@ -67,14 +70,21 @@
 @if (ShowDeleteConfirm)
 {
     <div class="modal-overlay" @onclick="CancelDelete">
-        <div class="modal-dialog" @onclick:stopPropagation="true">
+        <div class="modal-dialog"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="delete-modal-title"
+             @onclick:stopPropagation="true"
+             @onkeydown="HandleDeleteModalKey"
+             tabindex="-1"
+             @ref="_deleteDialogRef">
             <div class="modal-content">
-                <h3>@L["editor.deleteTitle"]</h3>
+                <h3 id="delete-modal-title">@L["editor.deleteTitle"]</h3>
                 <p>@L["editor.deleteConfirm"]</p>
                 <p class="modal-date">@DiaryStore?.CurrentEntry?.Date.ToString("yyyy-MM-dd")</p>
                 <div class="modal-actions">
                     <button class="btn-cancel" @onclick="CancelDelete">@L["editor.cancel"]</button>
-                    <button class="btn-confirm-delete" @onclick="DeleteAsync">@L["editor.confirmDelete"]</button>
+                    <button class="btn-confirm-delete" @onclick="DeleteAsync" @ref="_deleteConfirmRef">@L["editor.confirmDelete"]</button>
                 </div>
             </div>
         </div>
@@ -90,6 +100,9 @@
 
     private bool ShowPreview;
     private bool ShowDeleteConfirm;
+    private ElementReference _deleteDialogRef;
+    private ElementReference _deleteConfirmRef;
+    private bool _focusDeleteConfirm;
 
     // Debounce uses a CancellationTokenSource + Task.Delay rather than
     // System.Threading.Timer. With Timer, Dispose() cannot cancel a callback
@@ -238,6 +251,7 @@
     private void ConfirmDelete()
     {
         ShowDeleteConfirm = true;
+        _focusDeleteConfirm = true;
     }
 
     private void CancelDelete()
@@ -245,10 +259,47 @@
         ShowDeleteConfirm = false;
     }
 
+    private void HandleDeleteModalKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            CancelDelete();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusDeleteConfirm && ShowDeleteConfirm)
+        {
+            _focusDeleteConfirm = false;
+            try
+            {
+                // Initial focus lands on the destructive button so keyboard users
+                // see where the modal is; the modal owner's Escape key still
+                // aborts. If you'd rather auto-focus the cancel button instead,
+                // switch to _deleteDialogRef → Cancel.
+                await _deleteDialogRef.FocusAsync();
+            }
+            catch
+            {
+                // Element not yet in DOM — safe to skip.
+            }
+        }
+    }
+
     private async Task DeleteAsync()
     {
         ShowDeleteConfirm = false;
         await DiaryStore.DeleteCurrentEntryAsync();
+    }
+
+    // Empty-state CTA: when nothing has been selected yet, one click drops the
+    // user straight into today's entry. Mirrors the "+ Today" sidebar button so
+    // an out-of-focus user isn't stranded on an instructional-only screen.
+    private async Task OpenTodayEntryAsync()
+    {
+        var today = PathHelper.GetToday();
+        await DiaryStore.LoadEntryAsync(today);
     }
 
     private MarkupString RenderMarkdown(string content)

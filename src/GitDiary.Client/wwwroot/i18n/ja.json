@@ -28,6 +28,7 @@
   "editor.deleteConfirm": "この日記を削除してもよろしいですか？",
   "editor.cancel": "キャンセル",
   "editor.confirmDelete": "削除",
+  "editor.emptyCta": "今日の日記を書く",
 
   "setup.subtitleWelcome": "ようこそ！日記をセットアップしましょう。",
   "setup.subtitleUpdate": "GitHub リポジトリの設定を更新します。",
@@ -48,6 +49,9 @@
   "setup.errorCannotConnect": "リポジトリに接続できません：{0}",
   "setup.errorNoWrite": "トークンに書き込み権限がありません。Fine-Grained PAT に「Contents: 読み取りと書き込み」権限があるかご確認ください。",
   "setup.errorConnection": "接続に失敗しました：{0}",
+  "setup.errorInvalidOwner": "オーナー名の形式が無効です（1-39 文字の英数字またはハイフン）。",
+  "setup.errorInvalidRepo": "リポジトリ名の形式が無効です（1-100 文字の英数字、ドット、アンダースコア、ハイフン）。",
+  "setup.errorInvalidToken": "トークンが GitHub PAT の形式ではありません。「github_pat_…」または「ghp_…」で始まる必要があります。",
   "setup.language": "言語",
 
   "search.placeholder": "日記を検索…",
@@ -59,5 +63,9 @@
   "status.conflict": "競合 — コミット拒否",
   "status.failed": "コミット失敗 — 下書きはローカルに保持",
   "status.unsaved": "• 未保存の変更",
-  "status.entries": "{0} 件"
+  "status.entries": "{0} 件",
+  "status.words": "{0} 語",
+  "status.offline": "オフライン中 — 変更はローカルに保留されます",
+
+  "home.resizerTooltip": "ドラッグで幅を調整 · ダブルクリックでリセット"
 }

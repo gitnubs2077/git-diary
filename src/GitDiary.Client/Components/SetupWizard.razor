@@ -1,6 +1,7 @@
 @using GitDiary.Client.Models
 @using GitDiary.Client.Stores
 @using GitDiary.Client.Services
+@using System.Text.RegularExpressions
 @implements IDisposable
 
 <div class="setup-wizard">
@@ -13,10 +14,10 @@
         <div class="setup-form">
             <div class="form-group">
                 <label for="language">@L["setup.language"]</label>
-                <select id="language" value="@L.CurrentLanguage" @onchange="OnLanguageChanged">
+                <select id="language" value="@L.CurrentLanguage.Code()" @onchange="OnLanguageChanged">
                     @foreach (var lang in L.AvailableLanguages)
                     {
-                        <option value="@lang">@lang.DisplayName()</option>
+                        <option value="@lang.Code()">@lang.DisplayName()</option>
                     }
                 </select>
             </div>
@@ -168,8 +169,9 @@
 
     private async Task OnLanguageChanged(ChangeEventArgs e)
     {
-        if (e.Value is string raw && Enum.TryParse<Language>(raw, out var lang))
+        if (e.Value is string code)
         {
+            var lang = LanguageExtensions.FromCode(code);
             await L.SetLanguageAsync(lang);
         }
     }
@@ -211,6 +213,16 @@
             Token = Token.Trim()
         };
 
+        // Client-side format validation. GitHub enforces the real rules
+        // server-side, but catching obvious paste errors here gives a much
+        // clearer message than "HTTP 404 Not Found" from the API.
+        var validationError = ValidateConfig(config);
+        if (validationError is not null)
+        {
+            ErrorMessage = validationError;
+            return;
+        }
+
         try
         {
             SettingsStore.SetConfig(config);
@@ -239,6 +251,32 @@
         {
             ErrorMessage = L.Format("setup.errorConnection", ex.Message);
         }
+    }
+
+    // GitHub username/org: 1-39 chars, alphanumeric or hyphen, no leading/trailing hyphen.
+    private static readonly Regex OwnerPattern = new(
+        @"^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$",
+        RegexOptions.Compiled);
+    // GitHub repo name: 1-100 chars, alphanumeric plus . _ -
+    private static readonly Regex RepoPattern = new(
+        @"^[A-Za-z0-9._-]{1,100}$",
+        RegexOptions.Compiled);
+    // Fine-grained PAT: "github_pat_*" (~93 chars). Classic PATs: "ghp_"+40 hex-ish.
+    // Legacy hex tokens (40 hex) are also still valid on GHES. Be permissive but
+    // reject obvious junk (URLs, empty spaces, whole quotes).
+    private static readonly Regex TokenPattern = new(
+        @"^(github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{30,}|gho_[A-Za-z0-9]{30,}|ghu_[A-Za-z0-9]{30,}|ghs_[A-Za-z0-9]{30,}|[a-f0-9]{40})$",
+        RegexOptions.Compiled);
+
+    private string? ValidateConfig(RepositoryConfig cfg)
+    {
+        if (!OwnerPattern.IsMatch(cfg.Owner))
+            return L["setup.errorInvalidOwner"];
+        if (!RepoPattern.IsMatch(cfg.Repo))
+            return L["setup.errorInvalidRepo"];
+        if (!TokenPattern.IsMatch(cfg.Token))
+            return L["setup.errorInvalidToken"];
+        return null;
     }
 
     public void Dispose()
