@@ -123,9 +123,15 @@ else
                     Token = token
                 };
 
-                SettingsStore.SetConfig(config);
+                // Order matters: WASM's renderer processes StateHasChanged
+                // synchronously, so the moment SettingsStore.IsConfigured
+                // flips to true, Home re-renders and mounts <Sidebar>, which
+                // in its OnInitializedAsync immediately calls into
+                // GitHubApiClient. Configure the API client FIRST so the
+                // child's synchronous mount path finds a valid _config.
                 GitHubApi.SetConfig(config);
                 GitHubApi.SetToken(token);
+                SettingsStore.SetConfig(config);
 
                 await DiaryStore.RefreshEntriesAsync();
                 var today = PathHelper.GetToday();

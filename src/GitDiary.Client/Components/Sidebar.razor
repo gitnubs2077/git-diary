@@ -114,6 +114,9 @@
     [Inject]
     private ThemeService ThemeSvc { get; set; } = default!;
 
+    [Inject]
+    private SettingsStore SettingsStore { get; set; } = default!;
+
     [Parameter]
     public EventCallback<DateOnly> OnEntrySelected { get; set; }
 
@@ -142,7 +145,14 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await DiaryStore.RefreshEntriesAsync();
+        // Belt-and-braces: Home is supposed to configure GitHubApiClient before
+        // flipping SettingsStore.IsConfigured, but WASM's synchronous StateHasChanged
+        // makes that ordering fragile. If we get here without config, just skip
+        // the fetch — HandleStateChanged will refresh once config lands.
+        if (SettingsStore.IsConfigured)
+        {
+            await DiaryStore.RefreshEntriesAsync();
+        }
         DiaryStore.StateChanged += HandleStateChanged;
         L.StateChanged += HandleStateChanged;
         ThemeSvc.StateChanged += HandleStateChanged;

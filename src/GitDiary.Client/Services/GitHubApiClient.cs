@@ -221,7 +221,14 @@ public sealed class GitHubApiClient
     /// </summary>
     public async Task<Result<List<TreeNode>>> GetTreeAsync()
     {
-        var url = GetApiUrl($"git/trees/{_config?.Branch ?? "main"}?recursive=1");
+        // Called from DiaryStore.RefreshEntriesAsync, which can race ahead of
+        // config being applied during a first-run render (see SetupWizard /
+        // Home.OnInitializedAsync ordering). Surface a clean failure instead
+        // of throwing so the sidebar just renders empty until config lands.
+        if (_config is null)
+            return Result<List<TreeNode>>.Failure("Repository config not set");
+
+        var url = GetApiUrl($"git/trees/{_config.Branch ?? "main"}?recursive=1");
         try
         {
             var request = new HttpRequestMessage(HttpMethod.Get, url);

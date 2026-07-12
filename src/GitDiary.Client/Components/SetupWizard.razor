@@ -266,9 +266,16 @@
 
             try
             {
-                SettingsStore.SetConfig(config);
+                // Configure the API client BEFORE flipping SettingsStore.IsConfigured.
+                // Home listens for that flag and swaps to the app layout, which
+                // synchronously mounts <Sidebar> — and Sidebar's OnInitializedAsync
+                // dives straight into GitHubApiClient.GetTreeAsync. If we set
+                // SettingsStore first the WASM renderer runs that mount before
+                // the next two lines execute, and GetApiUrl blows up with
+                // "Repository config not set".
                 GitHubApi.SetConfig(config);
                 GitHubApi.SetToken(config.Token);
+                SettingsStore.SetConfig(config);
 
                 // Test read access
                 var testResult = await GitHubApi.GetTreeAsync();
