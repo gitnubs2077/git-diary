@@ -7,23 +7,23 @@
     <div class="status-left">
         @if (DiaryStore.SyncState == SyncState.Synced)
         {
-            <span class="status-synced">@L["status.committed"]</span>
+            <span class="status-synced">✅ @L["status.committed"]</span>
         }
         else if (DiaryStore.SyncState == SyncState.Saving)
         {
-            <span class="status-saving">@L["status.committing"]</span>
+            <span class="status-saving">⏫ @L["status.committing"]</span>
         }
         else if (DiaryStore.SyncState == SyncState.Pending)
         {
-            <span class="status-pending">@L["status.pending"]</span>
+            <span class="status-pending">📝 @L["status.pending"]</span>
         }
         else if (DiaryStore.SyncState == SyncState.Conflict)
         {
-            <span class="status-conflict">@L["status.conflict"]</span>
+            <span class="status-conflict">⚠️ @L["status.conflict"]</span>
         }
         else if (DiaryStore.SyncState == SyncState.Failed)
         {
-            <span class="status-failed">@L["status.failed"]</span>
+            <span class="status-failed">❌ @L["status.failed"]</span>
         }
 
         @if (DiaryStore.IsDirty)

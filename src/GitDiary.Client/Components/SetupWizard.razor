@@ -125,7 +125,7 @@
         ?? (ExistingConfig is null ? L["setup.subtitleWelcome"] : L["setup.subtitleUpdate"]);
 
     private string EffectiveButtonText => ButtonText
-        ?? (ExistingConfig is null ? L["setup.buttonStart"] : L["setup.buttonSave"]);
+        ?? (ExistingConfig is null ? $"🚀 {L["setup.buttonStart"]}" : $"💾 {L["setup.buttonSave"]}");
 
     private string Owner { get; set; } = "";
     private string Repo { get; set; } = "";

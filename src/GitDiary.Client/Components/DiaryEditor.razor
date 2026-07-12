@@ -11,7 +11,7 @@
             <span class="editor-date">@DiaryStore.CurrentEntry.Date.ToString("yyyy-MM-dd")</span>
             <div class="editor-actions">
                 <button class="btn-save" @onclick="SaveAsync" disabled="@(!DiaryStore.IsDirty)">
-                    @L["editor.save"]
+                    💾 @L["editor.save"]
                 </button>
                 <button class="btn-commit"
                         @onclick="CommitAsync"
@@ -20,10 +20,10 @@
                     @CommitButtonLabel
                 </button>
                 <button class="btn-preview-toggle" @onclick="TogglePreview">
-                    @(ShowPreview ? L["editor.edit"] : L["editor.preview"])
+                    @(ShowPreview ? $"✏️ {L["editor.edit"]}" : $"👁️ {L["editor.preview"]}")
                 </button>
                 <button class="btn-delete" @onclick="ConfirmDelete">
-                    @L["editor.delete"]
+                    🗑️ @L["editor.delete"]
                 </button>
             </div>
         </div>
@@ -99,10 +99,10 @@
 
     private string CommitButtonLabel => DiaryStore.SyncState switch
     {
-        SyncState.Saving => L["editor.committing"],
-        SyncState.Conflict => L["editor.commitConflict"],
-        SyncState.Failed => L["editor.retryCommit"],
-        _ => L["editor.commit"]
+        SyncState.Saving => $"⏫ {L["editor.committing"]}",
+        SyncState.Conflict => $"⚠️ {L["editor.commitConflict"]}",
+        SyncState.Failed => $"🔁 {L["editor.retryCommit"]}",
+        _ => $"⏫ {L["editor.commit"]}"
     };
 
     protected override void OnInitialized()
