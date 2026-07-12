@@ -1,0 +1,25 @@
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Microsoft.JSInterop;
+using GitDiary.Client;
+using GitDiary.Client.Services;
+using GitDiary.Client.Stores;
+
+var builder = WebAssemblyHostBuilder.CreateDefault(args);
+builder.RootComponents.Add<App>("#app");
+builder.RootComponents.Add<HeadOutlet>("head::after");
+
+builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
+
+// Services
+builder.Services.AddScoped<GitHubApiClient>();
+builder.Services.AddScoped<DiaryRepository>();
+builder.Services.AddSingleton<IndexedDbRepository>();
+builder.Services.AddSingleton<SearchService>();
+builder.Services.AddScoped<SyncService>();
+
+// Stores
+builder.Services.AddSingleton<SettingsStore>();
+builder.Services.AddScoped<DiaryStore>();
+
+await builder.Build().RunAsync();

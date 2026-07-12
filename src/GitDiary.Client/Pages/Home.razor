@@ -1,0 +1,154 @@
+@page "/"
+@using GitDiary.Client.Components
+@using GitDiary.Client.Stores
+@using GitDiary.Client.Infrastructure
+@using GitDiary.Client.Models
+@implements IDisposable
+
+@if (!SettingsStore.IsConfigured)
+{
+    <SetupWizard ConfigSaved="OnConfigSaved" />
+}
+else if (ShowSettings)
+{
+    <div class="settings-overlay" @onclick="CloseSettings">
+        <div class="settings-container" @onclick:stopPropagation="true">
+            <SetupWizard
+                ExistingConfig="SettingsStore.Config"
+                Subtitle="Update your GitHub repository settings."
+                ButtonText="💾 Save Settings"
+                ConfigSaved="OnSettingsSaved"
+                CancelClicked="CloseSettings" />
+        </div>
+    </div>
+}
+else
+{
+    <div class="app-layout">
+        <div class="app-sidebar">
+            <Sidebar
+                SelectedDate="@CurrentDate"
+                OnEntrySelected="OnEntrySelected"
+                OnSettingsClicked="OpenSettings" />
+        </div>
+        <div class="app-main">
+            <div class="app-toolbar">
+                <SearchBox OnEntrySelected="OnEntrySelected" />
+            </div>
+            <div class="app-editor">
+                <DiaryEditor />
+            </div>
+            <div class="app-statusbar">
+                <StatusBar />
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Inject]
+    private SettingsStore SettingsStore { get; set; } = default!;
+
+    [Inject]
+    private DiaryStore DiaryStore { get; set; } = default!;
+
+    [Inject]
+    private Services.GitHubApiClient GitHubApi { get; set; } = default!;
+
+    [Inject]
+    private IJSRuntime JsRuntime { get; set; } = default!;
+
+    private DateOnly? CurrentDate { get; set; }
+    private bool ShowSettings { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        SettingsStore.StateChanged += async () => await InvokeAsync(StateHasChanged);
+
+        // Load config from localStorage
+        try
+        {
+            var owner = await JsRuntime.InvokeAsync<string>("localStorage.getItem", "gitdiary_owner");
+            var repo = await JsRuntime.InvokeAsync<string>("localStorage.getItem", "gitdiary_repo");
+            var branch = await JsRuntime.InvokeAsync<string>("localStorage.getItem", "gitdiary_branch");
+            var token = await JsRuntime.InvokeAsync<string>("localStorage.getItem", "gitdiary_token");
+
+            if (!string.IsNullOrEmpty(owner) && !string.IsNullOrEmpty(repo) && !string.IsNullOrEmpty(token))
+            {
+                var config = new RepositoryConfig
+                {
+                    Owner = owner,
+                    Repo = repo,
+                    Branch = branch ?? "main",
+                    Token = token
+                };
+
+                SettingsStore.SetConfig(config);
+                GitHubApi.SetConfig(config);
+                GitHubApi.SetToken(token);
+
+                await DiaryStore.RefreshEntriesAsync();
+                var today = PathHelper.GetToday();
+                await OnEntrySelected(today);
+            }
+        }
+        catch
+        {
+            // Not configured yet
+        }
+    }
+
+    private async Task OnEntrySelected(DateOnly date)
+    {
+        CurrentDate = date;
+        await DiaryStore.LoadEntryAsync(date);
+    }
+
+    private void OpenSettings()
+    {
+        ShowSettings = true;
+    }
+
+    private void CloseSettings()
+    {
+        ShowSettings = false;
+    }
+
+    private async Task OnConfigSaved()
+    {
+        await PersistConfigAsync();
+        StateHasChanged();
+        var today = PathHelper.GetToday();
+        await DiaryStore.RefreshEntriesAsync();
+        await OnEntrySelected(today);
+    }
+
+    private async Task OnSettingsSaved()
+    {
+        await PersistConfigAsync();
+        ShowSettings = false;
+        StateHasChanged();
+        var today = PathHelper.GetToday();
+        await DiaryStore.RefreshEntriesAsync();
+        await OnEntrySelected(today);
+    }
+
+    private async Task PersistConfigAsync()
+    {
+        if (SettingsStore.Config is not null)
+        {
+            await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_owner", SettingsStore.Config.Owner);
+            await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_repo", SettingsStore.Config.Repo);
+            await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_branch", SettingsStore.Config.Branch);
+            await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_token", SettingsStore.Config.Token);
+
+            GitHubApi.SetConfig(SettingsStore.Config);
+            GitHubApi.SetToken(SettingsStore.Config.Token);
+        }
+    }
+
+    public void Dispose()
+    {
+        SettingsStore.StateChanged -= async () => await InvokeAsync(StateHasChanged);
+    }
+}

@@ -1,0 +1,64 @@
+@using GitDiary.Client.Stores
+@using GitDiary.Client.Models
+@implements IDisposable
+
+<div class="status-bar">
+    <div class="status-left">
+        @if (DiaryStore.SyncState == SyncState.Synced)
+        {
+            <span class="status-synced">✅ Committed</span>
+        }
+        else if (DiaryStore.SyncState == SyncState.Saving)
+        {
+            <span class="status-saving">⏫ Committing…</span>
+        }
+        else if (DiaryStore.SyncState == SyncState.Pending)
+        {
+            <span class="status-pending">📝 Draft saved locally — not committed</span>
+        }
+        else if (DiaryStore.SyncState == SyncState.Conflict)
+        {
+            <span class="status-conflict">⚠️ Conflict — commit rejected</span>
+        }
+        else if (DiaryStore.SyncState == SyncState.Failed)
+        {
+            <span class="status-failed">❌ Commit Failed — draft kept locally</span>
+        }
+
+        @if (DiaryStore.IsDirty)
+        {
+            <span class="status-message">• unsaved changes</span>
+        }
+
+        @if (!string.IsNullOrEmpty(StatusMessage))
+        {
+            <span class="status-message">@StatusMessage</span>
+        }
+    </div>
+    <div class="status-right">
+        <span class="status-entries">@DiaryStore.Entries.Count entries</span>
+    </div>
+</div>
+
+@code {
+    [Inject]
+    private DiaryStore DiaryStore { get; set; } = default!;
+
+    [Parameter]
+    public string? StatusMessage { get; set; }
+
+    protected override void OnInitialized()
+    {
+        DiaryStore.StateChanged += HandleStoreChanged;
+    }
+
+    private async void HandleStoreChanged()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        DiaryStore.StateChanged -= HandleStoreChanged;
+    }
+}

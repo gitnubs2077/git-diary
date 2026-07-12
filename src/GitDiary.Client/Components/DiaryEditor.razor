@@ -1,0 +1,204 @@
+@using GitDiary.Client.Stores
+@using GitDiary.Client.Models
+@using GitDiary.Client.Infrastructure
+@implements IDisposable
+
+<div class="diary-editor">
+    @if (DiaryStore.CurrentEntry is not null)
+    {
+        <div class="editor-toolbar">
+            <span class="editor-date">@DiaryStore.CurrentEntry.Date.ToString("yyyy-MM-dd")</span>
+            <div class="editor-actions">
+                <button class="btn-save" @onclick="SaveAsync" disabled="@(!DiaryStore.IsDirty)">
+                    💾 Save
+                </button>
+                <button class="btn-commit"
+                        @onclick="CommitAsync"
+                        disabled="@(!CanCommit)"
+                        title="Push the current draft to GitHub">
+                    @CommitButtonLabel
+                </button>
+                <button class="btn-preview-toggle" @onclick="TogglePreview">
+                    @(ShowPreview ? "✏️ Edit" : "👁️ Preview")
+                </button>
+                <button class="btn-delete" @onclick="ConfirmDelete">
+                    🗑️ Delete
+                </button>
+            </div>
+        </div>
+
+        <div class="editor-content">
+            @if (!ShowPreview)
+            {
+                <textarea
+                    class="editor-textarea"
+                    @bind="DiaryStore.CurrentContent"
+                    @bind:event="oninput"
+                    @onkeyup="HandleInput"
+                    rows="20"
+                    placeholder="Start writing your diary..."></textarea>
+            }
+            else
+            {
+                <div class="editor-preview markdown-body">
+                    @MarkdownContent
+                </div>
+            }
+        </div>
+    }
+    else if (DiaryStore.IsLoading)
+    {
+        <div class="editor-loading">Loading...</div>
+    }
+    else
+    {
+        <div class="editor-empty">
+            <div class="empty-icon">📝</div>
+            <h2>GitDiary</h2>
+            <p>Select a date from the sidebar or click "+ Today" to start writing.</p>
+        </div>
+    }
+</div>
+
+@if (ShowDeleteConfirm)
+{
+    <div class="modal-overlay" @onclick="CancelDelete">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-content">
+                <h3>Delete Diary</h3>
+                <p>Are you sure you want to delete this diary entry?</p>
+                <p class="modal-date">@DiaryStore?.CurrentEntry?.Date.ToString("yyyy-MM-dd")</p>
+                <div class="modal-actions">
+                    <button class="btn-cancel" @onclick="CancelDelete">Cancel</button>
+                    <button class="btn-confirm-delete" @onclick="DeleteAsync">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Inject]
+    private DiaryStore DiaryStore { get; set; } = default!;
+
+    private bool ShowPreview;
+    private bool ShowDeleteConfirm;
+    private Timer? _debounceTimer;
+    private MarkupString MarkdownContent => RenderMarkdown(DiaryStore.CurrentContent);
+
+    // Commit button is enabled whenever there's a local draft or unsaved changes,
+    // and disabled while a commit is already in flight.
+    private bool CanCommit =>
+        DiaryStore.CurrentEntry is not null
+        && DiaryStore.SyncState != SyncState.Saving
+        && (DiaryStore.IsDirty || DiaryStore.HasUncommittedDraft);
+
+    private string CommitButtonLabel => DiaryStore.SyncState switch
+    {
+        SyncState.Saving => "⏫ Committing…",
+        SyncState.Conflict => "⚠️ Commit (Conflict)",
+        SyncState.Failed => "🔁 Retry Commit",
+        _ => "⏫ Commit"
+    };
+
+    protected override void OnInitialized()
+    {
+        DiaryStore.StateChanged += HandleStoreChanged;
+    }
+
+    private async void HandleStoreChanged()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task TogglePreview()
+    {
+        // Flush any pending local save before switching views so the preview is fresh.
+        if (DiaryStore.IsDirty)
+        {
+            _debounceTimer?.Dispose();
+            _debounceTimer = null;
+            await DiaryStore.SaveDraftAsync();
+        }
+
+        ShowPreview = !ShowPreview;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleInput(KeyboardEventArgs e)
+    {
+        // Ctrl+S → immediate local save.
+        if (e.Key == "s" && e.CtrlKey)
+        {
+            _debounceTimer?.Dispose();
+            _debounceTimer = null;
+            _ = InvokeAsync(SaveAsync);
+            return;
+        }
+
+        // Otherwise, 2s debounce that persists the draft to localStorage — never to GitHub.
+        _debounceTimer?.Dispose();
+        _debounceTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(AutoSaveDraftAsync);
+        }, null, 2000, Timeout.Infinite);
+    }
+
+    private async Task AutoSaveDraftAsync()
+    {
+        if (DiaryStore.IsDirty && DiaryStore.CurrentEntry is not null)
+        {
+            await DiaryStore.SaveDraftAsync();
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _debounceTimer?.Dispose();
+        _debounceTimer = null;
+        await DiaryStore.SaveDraftAsync();
+    }
+
+    private async Task CommitAsync()
+    {
+        // Ensure the latest keystrokes are captured into the draft before pushing.
+        _debounceTimer?.Dispose();
+        _debounceTimer = null;
+        if (DiaryStore.IsDirty)
+        {
+            await DiaryStore.SaveDraftAsync();
+        }
+        await DiaryStore.CommitCurrentEntryAsync();
+    }
+
+    private void ConfirmDelete()
+    {
+        ShowDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        ShowDeleteConfirm = false;
+    }
+
+    private async Task DeleteAsync()
+    {
+        ShowDeleteConfirm = false;
+        await DiaryStore.DeleteCurrentEntryAsync();
+    }
+
+    private MarkupString RenderMarkdown(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+            return new MarkupString("");
+
+        var html = Markdig.Markdown.ToHtml(content);
+        return new MarkupString(html);
+    }
+
+    public void Dispose()
+    {
+        DiaryStore.StateChanged -= HandleStoreChanged;
+        _debounceTimer?.Dispose();
+    }
+}

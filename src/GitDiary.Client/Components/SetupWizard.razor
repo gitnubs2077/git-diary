@@ -1,0 +1,196 @@
+@using GitDiary.Client.Models
+@using GitDiary.Client.Stores
+
+<div class="setup-wizard">
+    <div class="setup-card">
+        <div class="setup-header">
+            <h1>📔 GitDiary</h1>
+            <p class="setup-subtitle">@Subtitle</p>
+        </div>
+
+        <div class="setup-form">
+            <div class="form-group">
+                <label for="owner">GitHub Owner</label>
+                <input
+                    id="owner"
+                    type="text"
+                    placeholder="e.g., your-username"
+                    value="@Owner"
+                    @oninput="OnOwnerInput" />
+            </div>
+
+            <div class="form-group">
+                <label for="repo">Repository Name</label>
+                <input
+                    id="repo"
+                    type="text"
+                    placeholder="e.g., my-diary"
+                    value="@Repo"
+                    @oninput="OnRepoInput" />
+            </div>
+
+            <div class="form-group">
+                <label for="branch">Branch</label>
+                <input
+                    id="branch"
+                    type="text"
+                    placeholder="main"
+                    value="@Branch"
+                    @oninput="OnBranchInput" />
+            </div>
+
+            <div class="form-group">
+                <label for="token">GitHub Fine-Grained PAT</label>
+                <input
+                    id="token"
+                    type="password"
+                    placeholder="github_pat_..."
+                    value="@Token"
+                    @oninput="OnTokenInput" />
+                <small class="form-hint">
+                    Requires repository Contents permission (Read and Write).
+                    <a href="https://github.com/settings/tokens?type=beta" target="_blank">Create a token →</a>
+                </small>
+            </div>
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <div class="form-error">❌ @ErrorMessage</div>
+            }
+
+            <div class="form-actions">
+                <button class="btn-primary" @onclick="SaveConfigAsync" disabled="@(!IsFormValid)">
+                    @ButtonText
+                </button>
+            </div>
+
+            @if (ShowCancel)
+            {
+                <div class="form-cancel">
+                    <button class="btn-cancel-full" @onclick="Cancel">Cancel</button>
+                </div>
+            }
+        </div>
+
+        <div class="setup-footer">
+            <p>Your token is stored only in your browser. Never uploaded.</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Inject]
+    private SettingsStore SettingsStore { get; set; } = default!;
+
+    [Inject]
+    private Services.GitHubApiClient GitHubApi { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback ConfigSaved { get; set; }
+
+    [Parameter]
+    public EventCallback CancelClicked { get; set; }
+
+    [Parameter]
+    public RepositoryConfig? ExistingConfig { get; set; }
+
+    [Parameter]
+    public string Title { get; set; } = "📔 GitDiary";
+
+    [Parameter]
+    public string Subtitle { get; set; } = "Welcome! Let's set up your diary.";
+
+    [Parameter]
+    public string ButtonText { get; set; } = "🚀 Start Writing";
+
+    private string Owner { get; set; } = "";
+    private string Repo { get; set; } = "";
+    private string Branch { get; set; } = "main";
+    private string Token { get; set; } = "";
+    private string? ErrorMessage { get; set; }
+
+    private bool ShowCancel => ExistingConfig is not null;
+
+    private bool IsFormValid =>
+        !string.IsNullOrWhiteSpace(Owner) &&
+        !string.IsNullOrWhiteSpace(Repo) &&
+        !string.IsNullOrWhiteSpace(Token);
+
+    protected override void OnInitialized()
+    {
+        if (ExistingConfig is not null)
+        {
+            Owner = ExistingConfig.Owner;
+            Repo = ExistingConfig.Repo;
+            Branch = ExistingConfig.Branch;
+            Token = ExistingConfig.Token;
+        }
+    }
+
+    private void OnOwnerInput(ChangeEventArgs e)
+    {
+        Owner = e.Value?.ToString() ?? "";
+    }
+
+    private void OnRepoInput(ChangeEventArgs e)
+    {
+        Repo = e.Value?.ToString() ?? "";
+    }
+
+    private void OnBranchInput(ChangeEventArgs e)
+    {
+        Branch = e.Value?.ToString() ?? "";
+    }
+
+    private void OnTokenInput(ChangeEventArgs e)
+    {
+        Token = e.Value?.ToString() ?? "";
+    }
+
+    private async Task Cancel()
+    {
+        await CancelClicked.InvokeAsync();
+    }
+
+    private async Task SaveConfigAsync()
+    {
+        ErrorMessage = null;
+
+        var config = new RepositoryConfig
+        {
+            Owner = Owner.Trim(),
+            Repo = Repo.Trim(),
+            Branch = string.IsNullOrWhiteSpace(Branch) ? "main" : Branch.Trim(),
+            Token = Token.Trim()
+        };
+
+        try
+        {
+            SettingsStore.SetConfig(config);
+            GitHubApi.SetConfig(config);
+            GitHubApi.SetToken(config.Token);
+
+            // Test read access
+            var testResult = await GitHubApi.GetTreeAsync();
+            if (testResult.IsFailure)
+            {
+                ErrorMessage = $"Cannot connect to repository: {testResult.Error}";
+                return;
+            }
+
+            // Test write access
+            var writeTest = await GitHubApi.TestWriteAccessAsync();
+            if (writeTest.IsFailure)
+            {
+                ErrorMessage = "Token does not have write access. Please make sure your Fine-Grained PAT has 'Contents: Read and Write' permission.";
+                return;
+            }
+
+            await ConfigSaved.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Connection failed: {ex.Message}";
+        }
+    }
+}

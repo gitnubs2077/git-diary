@@ -1,0 +1,100 @@
+@using GitDiary.Client.Services
+
+<div class="search-box">
+    <div class="search-input-wrapper">
+        <input
+            type="text"
+            placeholder="Search diary entries..."
+            @bind="Keyword"
+            @bind:event="oninput"
+            @onkeyup="HandleKeyUp"
+            @ref="SearchInput" />
+        <button class="btn-search" @onclick="DoSearch" disabled="@string.IsNullOrWhiteSpace(Keyword)">
+            🔍
+        </button>
+    </div>
+
+    @if (SearchResults is not null && SearchResults.Any())
+    {
+        <div class="search-results">
+            <div class="search-results-header">
+                Found @SearchResults.Count result(s)
+                <button class="btn-close-results" @onclick="ClearSearch">✕</button>
+            </div>
+            @foreach (var result in SearchResults)
+            {
+                <div class="search-result-item" @onclick="() => SelectResult(result.Date)">
+                    <div class="result-date">@result.Date.ToString("yyyy-MM-dd")</div>
+                    <div class="result-preview">@GetPreview(result.Content)</div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Inject]
+    private SearchService SearchService { get; set; } = default!;
+
+    [Inject]
+    private Stores.DiaryStore DiaryStore { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback<DateOnly> OnEntrySelected { get; set; }
+
+    private string Keyword { get; set; } = "";
+    private List<Models.DiaryEntry>? SearchResults { get; set; }
+    private ElementReference SearchInput;
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await DoSearch();
+        }
+        else if (e.Key == "Escape")
+        {
+            ClearSearch();
+        }
+        else if (string.IsNullOrWhiteSpace(Keyword))
+        {
+            SearchResults = null;
+        }
+    }
+
+    private async Task DoSearch()
+    {
+        if (string.IsNullOrWhiteSpace(Keyword))
+        {
+            SearchResults = null;
+            return;
+        }
+
+        await DiaryStore.BuildSearchIndexAsync();
+        SearchResults = SearchService.Search(Keyword);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SelectResult(DateOnly date)
+    {
+        await DiaryStore.LoadEntryAsync(date);
+        await OnEntrySelected.InvokeAsync(date);
+        ClearSearch();
+    }
+
+    private void ClearSearch()
+    {
+        Keyword = "";
+        SearchResults = null;
+    }
+
+    private string GetPreview(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+            return "";
+
+        // Remove markdown headers and take first 100 chars
+        var plain = System.Text.RegularExpressions.Regex.Replace(content, @"^#+\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+        return plain.Length > 100 ? plain[..100] + "..." : plain;
+    }
+}

@@ -1,0 +1,185 @@
+@using GitDiary.Client.Infrastructure
+@using GitDiary.Client.Models
+@using GitDiary.Client.Stores
+
+<div class="sidebar">
+    <div class="sidebar-header">
+        <h3>📅 Diary</h3>
+        <div class="sidebar-header-actions">
+            <button class="btn-icon" @onclick="OpenSettings" title="Settings">⚙️</button>
+            <button class="btn-new" @onclick="CreateTodayEntry">+ Today</button>
+        </div>
+    </div>
+
+    <div class="sidebar-search">
+        <input
+            type="text"
+            placeholder="Search..."
+            @bind="SearchKeyword"
+            @bind:event="oninput"
+            @onkeyup="HandleSearchKeyUp" />
+    </div>
+
+    <div class="sidebar-list">
+        @if (GroupedEntries is not null)
+        {
+            @foreach (var yearGroup in GroupedEntries)
+            {
+                <div class="year-group">
+                    <div class="year-header" @onclick="() => ToggleYear(yearGroup.Year)">
+                        <span class="toggle-icon">@(ExpandedYears.Contains(yearGroup.Year) ? "▼" : "▶")</span>
+                        <span class="year-label">@yearGroup.Year</span>
+                    </div>
+
+                    @if (ExpandedYears.Contains(yearGroup.Year))
+                    {
+                        @foreach (var monthGroup in yearGroup.Months)
+                        {
+                            <div class="month-group">
+                                <div class="month-header" @onclick="() => ToggleMonth(monthGroup.Month)">
+                                    <span class="toggle-icon">@(ExpandedMonths.Contains(monthGroup.Month) ? "▼" : "▶")</span>
+                                    <span class="month-label">@monthGroup.Month.ToString("D2")</span>
+                                </div>
+
+                                @if (ExpandedMonths.Contains(monthGroup.Month))
+                                {
+                                    @foreach (var entry in monthGroup.Entries)
+                                    {
+                                        <div
+                                            class="diary-entry-item @(IsSelected(entry.Date) ? "selected" : "")"
+                                            @onclick="() => SelectEntry(entry.Date)">
+                                            @entry.Date.ToString("yyyy-MM-dd")
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        }
+
+        @if (GroupedEntries is null || !GroupedEntries.Any())
+        {
+            <div class="sidebar-empty">No diary entries yet.</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Inject]
+    private DiaryStore DiaryStore { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback<DateOnly> OnEntrySelected { get; set; }
+
+    [Parameter]
+    public DateOnly? SelectedDate { get; set; }
+
+    [Parameter]
+    public EventCallback OnSettingsClicked { get; set; }
+
+    private string SearchKeyword { get; set; } = "";
+    private HashSet<int> ExpandedYears { get; set; } = new();
+    private HashSet<int> ExpandedMonths { get; set; } = new();
+
+    private List<YearGroup>? GroupedEntries => GetGroupedEntries();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await DiaryStore.RefreshEntriesAsync();
+        DiaryStore.StateChanged += async () => await InvokeAsync(StateHasChanged);
+
+        // Auto select today
+        if (SelectedDate == null)
+        {
+            var today = PathHelper.GetToday();
+            await SelectEntry(today);
+        }
+    }
+
+    private async Task SelectEntry(DateOnly date)
+    {
+        SelectedDate = date;
+        await DiaryStore.LoadEntryAsync(date);
+        await OnEntrySelected.InvokeAsync(date);
+    }
+
+    private async Task CreateTodayEntry()
+    {
+        var today = PathHelper.GetToday();
+        await DiaryStore.LoadEntryAsync(today);
+        SelectedDate = today;
+    }
+
+    private async Task OpenSettings()
+    {
+        await OnSettingsClicked.InvokeAsync();
+    }
+
+    private bool IsSelected(DateOnly date) => SelectedDate == date;
+
+    private void ToggleYear(int year)
+    {
+        if (ExpandedYears.Contains(year))
+            ExpandedYears.Remove(year);
+        else
+            ExpandedYears.Add(year);
+    }
+
+    private void ToggleMonth(int month)
+    {
+        if (ExpandedMonths.Contains(month))
+            ExpandedMonths.Remove(month);
+        else
+            ExpandedMonths.Add(month);
+    }
+
+    private List<YearGroup>? GetGroupedEntries()
+    {
+        var entries = DiaryStore.Entries;
+        if (entries == null || entries.Count == 0)
+            return null;
+
+        return entries
+            .GroupBy(e => e.Date.Year)
+            .Select(yearGroup => new YearGroup
+            {
+                Year = yearGroup.Key,
+                Months = yearGroup
+                    .GroupBy(e => e.Date.Month)
+                    .Select(monthGroup => new MonthGroup
+                    {
+                        Year = yearGroup.Key,
+                        Month = monthGroup.Key,
+                        Entries = monthGroup.OrderByDescending(e => e.Date).ToList()
+                    })
+                    .OrderByDescending(m => m.Month)
+                    .ToList()
+            })
+            .OrderByDescending(y => y.Year)
+            .ToList();
+    }
+
+    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(SearchKeyword))
+        {
+            // Search will be handled by SearchBox component
+        }
+        await Task.CompletedTask;
+    }
+
+    private class YearGroup
+    {
+        public int Year { get; set; }
+        public List<MonthGroup> Months { get; set; } = new();
+    }
+
+    private class MonthGroup
+    {
+        public int Year { get; set; }
+        public int Month { get; set; }
+        public List<DiaryEntryInfo> Entries { get; set; } = new();
+    }
+}
