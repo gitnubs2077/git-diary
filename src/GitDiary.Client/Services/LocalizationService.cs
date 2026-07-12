@@ -127,11 +127,16 @@ public sealed class LocalizationService : StoreBase
             var dict = await _http.GetFromJsonAsync<Dictionary<string, string>>($"i18n/{language.Code()}.json");
             _cache[language] = dict ?? new Dictionary<string, string>();
         }
-        catch
+        catch (Exception ex)
         {
-            // Network / parse failure — cache an empty dict so we don't retry every render,
-            // and rely on the English fallback (or the key) at lookup time.
-            _cache[language] = new Dictionary<string, string>();
+            // Do NOT insert an empty dict on failure. Caching an empty dict
+            // would permanently blank-out this language for the session — the
+            // user could re-select it from the language picker and we'd never
+            // retry the fetch. Leaving the cache untouched means the next
+            // SetLanguageAsync (or a fresh InitializeAsync) will re-attempt
+            // the load. Lookups fall back to English / the raw key in the
+            // meantime, which is what we want.
+            Console.Error.WriteLine($"[GitDiary] LocalizationService failed to load '{language.Code()}': {ex.GetType().Name}: {ex.Message}");
         }
     }
 }

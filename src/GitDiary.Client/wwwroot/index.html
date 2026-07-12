@@ -4,6 +4,17 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <!--
+        Content-Security-Policy (defense-in-depth against Markdown-preview XSS).
+        connect-src restricts fetch to same-origin + api.github.com so a compromised
+        renderer cannot exfiltrate the PAT to a foreign host. 'unsafe-inline' is
+        currently required by the inline theme/SW-register scripts and Blazor's
+        generated styles; 'wasm-unsafe-eval' is required by the WASM runtime.
+        Note: frame-ancestors is intentionally omitted — it is ignored in <meta>
+        CSPs by every browser and must be supplied via HTTP headers instead.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.github.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <title>GitDiary</title>
     <base href="/" />
     <link rel="preload" id="webassembly" />
@@ -124,6 +135,29 @@
                         try { localStorage.setItem(SIDEBAR_KEY, String(SIDEBAR_DEFAULT)); } catch (_) { /* ignore */ }
                     });
                 }
+            };
+
+            // Online-status bridge. When the browser reports `online`, we notify
+            // .NET so SyncService can flush pending drafts. `register` is idempotent —
+            // subsequent calls are ignored while a handler is already attached.
+            window.gitdiaryOnline = {
+                _handler: null,
+                register: function (dotNetRef) {
+                    if (this._handler) return;
+                    const self = this;
+                    this._handler = function () {
+                        try { dotNetRef.invokeMethodAsync('OnBrowserOnline'); }
+                        catch (_) { /* .NET side gone */ }
+                    };
+                    window.addEventListener('online', this._handler);
+                },
+                unregister: function () {
+                    if (this._handler) {
+                        window.removeEventListener('online', this._handler);
+                        this._handler = null;
+                    }
+                },
+                isOnline: function () { return navigator.onLine !== false; }
             };
         })();
     </script>

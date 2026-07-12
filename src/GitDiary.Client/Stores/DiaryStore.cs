@@ -145,20 +145,28 @@ public sealed class DiaryStore : StoreBase
     }
 
     /// <summary>
-    /// Push the current entry to GitHub. On success, the local draft is discarded.
+    /// Push the current entry to GitHub. On success, the local draft is discarded
+    /// <em>only</em> when the buffer is still identical to what we committed.
+    /// If the user kept typing while the network round-trip was in flight
+    /// (200–1000 ms is normal for GitHub), those keystrokes must not be lost —
+    /// we keep them as a fresh Pending draft against the new SHA.
     /// Invoked explicitly by the Commit button.
     /// </summary>
     public async Task CommitCurrentEntryAsync()
     {
         if (CurrentEntry == null) return;
 
+        // Snapshot the exact bytes we are about to send. Anything the user types
+        // after this line is a NEW edit that must survive the commit.
+        var committedContent = CurrentContent;
+
         // Snapshot latest buffer into the entry and into the local draft first,
         // so nothing is lost if the network call fails.
-        CurrentEntry.Content = CurrentContent;
+        CurrentEntry.Content = committedContent;
         await _indexedDb.SaveDraftAsync(new Draft
         {
             Path = CurrentEntry.Path,
-            Content = CurrentContent,
+            Content = committedContent,
             Sha = CurrentEntry.Sha,
             State = SyncState.Saving,
             UpdatedAt = DateTimeOffset.Now
@@ -172,18 +180,42 @@ public sealed class DiaryStore : StoreBase
             SyncState = SyncState.Synced;
             CurrentEntry.SyncState = SyncState.Synced;
             // SHA is already updated on CurrentEntry by DiaryRepository.SaveAsync.
-            await _indexedDb.RemoveDraftAsync(CurrentEntry.Path);
+
+            // Did the user keep typing while we were waiting on GitHub? If so,
+            // *do not* delete the draft — re-save it as Pending against the fresh
+            // SHA so the autosave/commit path picks up right where we left off.
+            if (CurrentContent != committedContent)
+            {
+                CurrentEntry.Content = CurrentContent;
+                CurrentEntry.SyncState = SyncState.Pending;
+                SyncState = SyncState.Pending;
+                IsDirty = true;
+
+                await _indexedDb.SaveDraftAsync(new Draft
+                {
+                    Path = CurrentEntry.Path,
+                    Content = CurrentContent,
+                    Sha = CurrentEntry.Sha,
+                    State = SyncState.Pending,
+                    UpdatedAt = DateTimeOffset.Now
+                });
+            }
+            else
+            {
+                await _indexedDb.RemoveDraftAsync(CurrentEntry.Path);
+            }
         }
         else
         {
-            // Keep the draft around so the user can retry later.
-            var failedState = result.Error?.Contains("sha", StringComparison.OrdinalIgnoreCase) == true
-                ? SyncState.Conflict
-                : SyncState.Failed;
+            // Classify by HTTP status: 409/422 → SHA/precondition conflict, everything else → generic failure.
+            // Substring-matching English error text was fragile and broke under localization / API-message drift.
+            var failedState = result.IsConflict ? SyncState.Conflict : SyncState.Failed;
 
             CurrentEntry.SyncState = failedState;
             SyncState = failedState;
 
+            // Preserve whatever the user has NOW (possibly newer than committedContent),
+            // not the stale committed snapshot.
             await _indexedDb.SaveDraftAsync(new Draft
             {
                 Path = CurrentEntry.Path,

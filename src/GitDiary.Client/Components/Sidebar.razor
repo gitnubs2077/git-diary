@@ -54,12 +54,12 @@
                         @foreach (var monthGroup in yearGroup.Months)
                         {
                             <div class="month-group">
-                                <div class="month-header" @onclick="() => ToggleMonth(monthGroup.Month)">
-                                    <span class="toggle-icon">@(ExpandedMonths.Contains(monthGroup.Month) ? "▼" : "▶")</span>
+                                <div class="month-header" @onclick="() => ToggleMonth(monthGroup.Year, monthGroup.Month)">
+                                    <span class="toggle-icon">@(ExpandedMonths.Contains((monthGroup.Year, monthGroup.Month)) ? "▼" : "▶")</span>
                                     <span class="month-label">@monthGroup.Month.ToString("D2")</span>
                                 </div>
 
-                                @if (ExpandedMonths.Contains(monthGroup.Month))
+                                @if (ExpandedMonths.Contains((monthGroup.Year, monthGroup.Month)))
                                 {
                                     @foreach (var entry in monthGroup.Entries)
                                     {
@@ -105,7 +105,9 @@
 
     private string SearchKeyword { get; set; } = "";
     private HashSet<int> ExpandedYears { get; set; } = new();
-    private HashSet<int> ExpandedMonths { get; set; } = new();
+    // Key on (year, month) — using just the month number would collide across years
+    // (e.g. expanding July 2025 would also expand July 2024).
+    private HashSet<(int Year, int Month)> ExpandedMonths { get; set; } = new();
 
     private List<YearGroup>? GroupedEntries => GetGroupedEntries();
 
@@ -126,7 +128,15 @@
 
     private async void HandleStateChanged()
     {
-        await InvokeAsync(StateHasChanged);
+        // async void: never let an exception escape to the sync context.
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] Sidebar.HandleStateChanged: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private async Task OnLanguageChanged(ChangeEventArgs e)
@@ -192,12 +202,13 @@
             ExpandedYears.Add(year);
     }
 
-    private void ToggleMonth(int month)
+    private void ToggleMonth(int year, int month)
     {
-        if (ExpandedMonths.Contains(month))
-            ExpandedMonths.Remove(month);
+        var key = (year, month);
+        if (ExpandedMonths.Contains(key))
+            ExpandedMonths.Remove(key);
         else
-            ExpandedMonths.Add(month);
+            ExpandedMonths.Add(key);
     }
 
     private List<YearGroup>? GetGroupedEntries()

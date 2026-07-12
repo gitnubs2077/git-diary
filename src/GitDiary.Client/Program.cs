@@ -19,6 +19,7 @@ builder.Services.AddSingleton<SearchService>();
 builder.Services.AddScoped<LocalizationService>();
 builder.Services.AddScoped<ThemeService>();
 builder.Services.AddScoped<SyncService>();
+builder.Services.AddScoped<OnlineSyncCoordinator>();
 
 // Stores
 builder.Services.AddSingleton<SettingsStore>();

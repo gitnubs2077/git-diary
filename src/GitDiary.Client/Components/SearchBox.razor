@@ -57,7 +57,15 @@
 
     private async void HandleLocalizationChanged()
     {
-        await InvokeAsync(StateHasChanged);
+        // async void: never let an exception escape to the sync context.
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] SearchBox.HandleLocalizationChanged: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private async Task HandleKeyUp(KeyboardEventArgs e)

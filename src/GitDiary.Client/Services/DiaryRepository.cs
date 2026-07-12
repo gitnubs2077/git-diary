@@ -30,22 +30,16 @@ public sealed class DiaryRepository
         }
 
         if (result.IsFailure)
-            return Result<DiaryEntry>.Failure(result.Error!);
+            return Result<DiaryEntry>.Failure(result.Error!, result.StatusCode);
 
-        var data = result.Value!;
-        var separatorIndex = data.IndexOf('|');
-        if (separatorIndex < 0)
-            return Result<DiaryEntry>.Failure("Invalid response format");
-
-        var sha = data[..separatorIndex];
-        var content = data[(separatorIndex + 1)..];
+        var payload = result.Value!;
 
         return Result<DiaryEntry>.Success(new DiaryEntry
         {
             Date = date,
             Path = path,
-            Content = content,
-            Sha = sha,
+            Content = payload.Content,
+            Sha = payload.Sha,
             SyncState = SyncState.Synced
         });
     }
@@ -61,7 +55,7 @@ public sealed class DiaryRepository
                 entry.SyncState = SyncState.Synced;
                 return Result<bool>.Success(true);
             }
-            return Result<bool>.Failure(result.Error ?? "Unknown error");
+            return Result<bool>.Failure(result.Error ?? "Unknown error", result.StatusCode);
         }
 
         var putResult = await _gitHubApi.PutFileAsync(entry.Path, entry.Content, entry.Sha);
@@ -72,7 +66,7 @@ public sealed class DiaryRepository
             return Result<bool>.Success(true);
         }
 
-        return Result<bool>.Failure(putResult.Error ?? "Unknown error");
+        return Result<bool>.Failure(putResult.Error ?? "Unknown error", putResult.StatusCode);
     }
 
     public async Task<Result<bool>> DeleteAsync(DiaryEntry entry)

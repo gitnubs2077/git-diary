@@ -36,7 +36,7 @@ public sealed class SyncService
                 {
                     entry.SyncState = SyncState.Failed;
                     SyncStateChanged?.Invoke(SyncState.Failed);
-                    return Result<bool>.Failure(result.Error ?? "Unknown error");
+                    return Result<bool>.Failure(result.Error ?? "Unknown error", result.StatusCode);
                 }
                 newSha = result.Value;
             }
@@ -46,17 +46,17 @@ public sealed class SyncService
                 var result = await _gitHubApi.PutFileAsync(entry.Path, entry.Content, entry.Sha);
                 if (result.IsFailure)
                 {
-                    // Check if it's a conflict
-                    if (result.Error?.Contains("sha") == true || result.Error?.Contains("409") == true)
+                    // Classify by HTTP status: 409/422 → SHA/precondition conflict.
+                    if (result.IsConflict)
                     {
                         entry.SyncState = SyncState.Conflict;
                         SyncStateChanged?.Invoke(SyncState.Conflict);
-                        return Result<bool>.Failure("Conflict detected");
+                        return Result<bool>.Failure("Conflict detected", result.StatusCode);
                     }
 
                     entry.SyncState = SyncState.Failed;
                     SyncStateChanged?.Invoke(SyncState.Failed);
-                    return Result<bool>.Failure(result.Error ?? "Unknown error");
+                    return Result<bool>.Failure(result.Error ?? "Unknown error", result.StatusCode);
                 }
                 newSha = result.Value;
             }

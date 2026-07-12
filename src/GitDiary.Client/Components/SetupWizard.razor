@@ -155,7 +155,15 @@
 
     private async void HandleLocalizationChanged()
     {
-        await InvokeAsync(StateHasChanged);
+        // async void: never let an exception escape to the sync context.
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] SetupWizard.HandleLocalizationChanged: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private async Task OnLanguageChanged(ChangeEventArgs e)

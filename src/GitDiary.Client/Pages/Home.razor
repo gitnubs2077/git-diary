@@ -55,16 +55,25 @@ else
     private Services.GitHubApiClient GitHubApi { get; set; } = default!;
 
     [Inject]
+    private Services.OnlineSyncCoordinator OnlineSync { get; set; } = default!;
+
+    [Inject]
     private IJSRuntime JsRuntime { get; set; } = default!;
 
     private DateOnly? CurrentDate { get; set; }
     private bool ShowSettings { get; set; }
     private ElementReference _resizerRef;
     private bool _resizerAttached;
+    // Keep the delegate as a field so Dispose can actually detach it.
+    // Using inline `async () => …` on both += and -= creates two distinct
+    // instances and Dispose silently no-ops, leaking a subscription per Home
+    // instance against the singleton SettingsStore.
+    private Action? _onSettingsChanged;
 
     protected override async Task OnInitializedAsync()
     {
-        SettingsStore.StateChanged += async () => await InvokeAsync(StateHasChanged);
+        _onSettingsChanged = () => _ = InvokeAsync(StateHasChanged);
+        SettingsStore.StateChanged += _onSettingsChanged;
 
         // Load config from localStorage
         try
@@ -91,11 +100,24 @@ else
                 await DiaryStore.RefreshEntriesAsync();
                 var today = PathHelper.GetToday();
                 await OnEntrySelected(today);
+
+                // Attach the browser `online` listener and try to flush any drafts
+                // that were left Pending/Failed in a previous session.
+                await OnlineSync.EnsureStartedAsync();
             }
+            // Otherwise: no config in localStorage yet → SetupWizard renders. That
+            // is a normal first-run state, not an error, and needs no logging.
         }
-        catch
+        catch (Exception ex)
         {
-            // Not configured yet
+            // Anything that actually throws here is unexpected: localStorage
+            // unavailable, corrupted JSON somewhere in the config load, or a
+            // GitHub round-trip failure. Log to console.error so users pasting
+            // us a bug report at least have a stack trace, and continue — the
+            // SetupWizard will render because SettingsStore.IsConfigured is
+            // still false.
+            Console.Error.WriteLine($"[GitDiary] Home.OnInitializedAsync failed: {ex.GetType().Name}: {ex.Message}");
+            Console.Error.WriteLine(ex.StackTrace);
         }
     }
 
@@ -146,6 +168,7 @@ else
         var today = PathHelper.GetToday();
         await DiaryStore.RefreshEntriesAsync();
         await OnEntrySelected(today);
+        await OnlineSync.EnsureStartedAsync();
     }
 
     private async Task OnSettingsSaved()
@@ -156,6 +179,7 @@ else
         var today = PathHelper.GetToday();
         await DiaryStore.RefreshEntriesAsync();
         await OnEntrySelected(today);
+        await OnlineSync.EnsureStartedAsync();
     }
 
     private async Task PersistConfigAsync()
@@ -174,6 +198,10 @@ else
 
     public void Dispose()
     {
-        SettingsStore.StateChanged -= async () => await InvokeAsync(StateHasChanged);
+        if (_onSettingsChanged is not null)
+        {
+            SettingsStore.StateChanged -= _onSettingsChanged;
+            _onSettingsChanged = null;
+        }
     }
 }

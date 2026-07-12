@@ -2,6 +2,9 @@
 @using GitDiary.Client.Models
 @using GitDiary.Client.Infrastructure
 @using GitDiary.Client.Services
+@using Markdig
+@using Markdig.Syntax
+@using Markdig.Syntax.Inlines
 @implements IDisposable
 
 <div class="diary-editor">
@@ -87,7 +90,13 @@
 
     private bool ShowPreview;
     private bool ShowDeleteConfirm;
-    private Timer? _debounceTimer;
+
+    // Debounce uses a CancellationTokenSource + Task.Delay rather than
+    // System.Threading.Timer. With Timer, Dispose() cannot cancel a callback
+    // that is already queued to run — so an in-flight tick and a fresh
+    // keystroke could race and produce a duplicate SaveDraftAsync. Task.Delay
+    // observes the token cooperatively, closing that window cleanly.
+    private CancellationTokenSource? _debounceCts;
     private MarkupString MarkdownContent => RenderMarkdown(DiaryStore.CurrentContent);
 
     // Commit button is enabled whenever there's a local draft or unsaved changes,
@@ -113,7 +122,17 @@
 
     private async void HandleStoreChanged()
     {
-        await InvokeAsync(StateHasChanged);
+        // async void: any exception escapes to the sync context and can tear
+        // down the render loop. Swallow + log so a transient render glitch
+        // doesn't kill the editor.
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] DiaryEditor.HandleStoreChanged: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private async Task TogglePreview()
@@ -121,8 +140,7 @@
         // Flush any pending local save before switching views so the preview is fresh.
         if (DiaryStore.IsDirty)
         {
-            _debounceTimer?.Dispose();
-            _debounceTimer = null;
+            CancelDebounce();
             await DiaryStore.SaveDraftAsync();
         }
 
@@ -135,18 +153,61 @@
         // Ctrl+S → immediate local save.
         if (e.Key == "s" && e.CtrlKey)
         {
-            _debounceTimer?.Dispose();
-            _debounceTimer = null;
+            CancelDebounce();
             _ = InvokeAsync(SaveAsync);
             return;
         }
 
         // Otherwise, 2s debounce that persists the draft to localStorage — never to GitHub.
-        _debounceTimer?.Dispose();
-        _debounceTimer = new Timer(async _ =>
+        ScheduleDebouncedAutoSave();
+    }
+
+    private void ScheduleDebouncedAutoSave()
+    {
+        CancelDebounce();
+        var cts = new CancellationTokenSource();
+        _debounceCts = cts;
+        _ = RunDebouncedAutoSaveAsync(cts);
+    }
+
+    private async Task RunDebouncedAutoSaveAsync(CancellationTokenSource cts)
+    {
+        try
         {
-            await InvokeAsync(AutoSaveDraftAsync);
-        }, null, 2000, Timeout.Infinite);
+            await Task.Delay(2000, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        finally
+        {
+            // Only null out the field if this call still owns it — a newer
+            // keystroke may have already replaced _debounceCts.
+            if (ReferenceEquals(_debounceCts, cts))
+            {
+                _debounceCts = null;
+            }
+            cts.Dispose();
+        }
+
+        await InvokeAsync(AutoSaveDraftAsync);
+    }
+
+    private void CancelDebounce()
+    {
+        var cts = _debounceCts;
+        _debounceCts = null;
+        if (cts is null) return;
+        try
+        {
+            cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Already disposed by the debounce task's finally block — ignore.
+        }
+        // Disposal is handled by RunDebouncedAutoSaveAsync's finally.
     }
 
     private async Task AutoSaveDraftAsync()
@@ -159,16 +220,14 @@
 
     private async Task SaveAsync()
     {
-        _debounceTimer?.Dispose();
-        _debounceTimer = null;
+        CancelDebounce();
         await DiaryStore.SaveDraftAsync();
     }
 
     private async Task CommitAsync()
     {
         // Ensure the latest keystrokes are captured into the draft before pushing.
-        _debounceTimer?.Dispose();
-        _debounceTimer = null;
+        CancelDebounce();
         if (DiaryStore.IsDirty)
         {
             await DiaryStore.SaveDraftAsync();
@@ -197,14 +256,78 @@
         if (string.IsNullOrEmpty(content))
             return new MarkupString("");
 
-        var html = Markdig.Markdown.ToHtml(content);
+        // Use a sanitizing pipeline that strips inline HTML and rewrites
+        // javascript:/vbscript:/data: URLs. Without this the Markdown preview
+        // is a stored-XSS sink that can exfiltrate the GitHub PAT from
+        // localStorage. See P0-SEC-1 in the release audit.
+        var html = Markdown.ToHtml(content, SafeMarkdownPipeline);
         return new MarkupString(html);
+    }
+
+    private static readonly MarkdownPipeline SafeMarkdownPipeline = BuildSafePipeline();
+
+    private static readonly HashSet<string> AllowedUrlSchemes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "http",
+        "https",
+        "mailto",
+        "tel"
+    };
+
+    private static MarkdownPipeline BuildSafePipeline()
+    {
+        var builder = new MarkdownPipelineBuilder()
+            .DisableHtml()
+            .UseAutoLinks()
+            .UseSoftlineBreakAsHardlineBreak();
+        builder.DocumentProcessed += SanitizeLinks;
+        return builder.Build();
+    }
+
+    private static void SanitizeLinks(MarkdownDocument document)
+    {
+        foreach (var link in document.Descendants<LinkInline>())
+        {
+            if (!IsSafeUrl(link.Url))
+            {
+                link.Url = string.Empty;
+            }
+        }
+
+        foreach (var link in document.Descendants<AutolinkInline>())
+        {
+            if (!IsSafeUrl(link.Url))
+            {
+                link.Url = string.Empty;
+            }
+        }
+    }
+
+    private static bool IsSafeUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return true;
+
+        var trimmed = url.TrimStart();
+        if (trimmed.Length == 0)
+            return true;
+
+        // Fragment, root-relative, query-relative, and dot-relative paths are all safe.
+        if (trimmed[0] is '#' or '/' or '?' or '.')
+            return true;
+
+        var colonIdx = trimmed.IndexOf(':');
+        if (colonIdx <= 0)
+            return true; // no scheme → treat as relative
+
+        var scheme = trimmed[..colonIdx];
+        return AllowedUrlSchemes.Contains(scheme);
     }
 
     public void Dispose()
     {
         DiaryStore.StateChanged -= HandleStoreChanged;
         L.StateChanged -= HandleStoreChanged;
-        _debounceTimer?.Dispose();
+        CancelDebounce();
     }
 }

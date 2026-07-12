@@ -51,9 +51,9 @@ public sealed class GitHubApiClient
     }
 
     /// <summary>
-    /// GET file content. Returns "sha|content" on success.
+    /// GET file content. Returns the file's SHA and UTF-8 decoded content.
     /// </summary>
-    public async Task<Result<string>> GetFileContentAsync(string path)
+    public async Task<Result<FileContent>> GetFileContentAsync(string path)
     {
         try
         {
@@ -65,9 +65,11 @@ public sealed class GitHubApiClient
             if (!response.IsSuccessStatusCode)
             {
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    return Result<string>.Failure("NOT_FOUND");
+                    return Result<FileContent>.Failure("NOT_FOUND", (int)response.StatusCode);
                 var errorBody = await response.Content.ReadAsStringAsync();
-                return Result<string>.Failure($"GitHub API error: {response.StatusCode} - {errorBody}");
+                return Result<FileContent>.Failure(
+                    $"GitHub API error: {response.StatusCode} - {errorBody}",
+                    (int)response.StatusCode);
             }
 
             var content = await response.Content.ReadAsStringAsync();
@@ -81,11 +83,11 @@ public sealed class GitHubApiClient
             var bytes = Convert.FromBase64String(base64);
             var text = Encoding.UTF8.GetString(bytes);
 
-            return Result<string>.Success(sha + "|" + text);
+            return Result<FileContent>.Success(new FileContent(sha, text));
         }
         catch (Exception ex)
         {
-            return Result<string>.Failure($"Failed to get file: {ex.Message}");
+            return Result<FileContent>.Failure($"Failed to get file: {ex.Message}");
         }
     }
 
@@ -118,7 +120,9 @@ public sealed class GitHubApiClient
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync();
-                return Result<string>.Failure($"GitHub API error: {response.StatusCode} - {errorBody}");
+                return Result<string>.Failure(
+                    $"GitHub API error: {response.StatusCode} - {errorBody}",
+                    (int)response.StatusCode);
             }
 
             var responseBody = await response.Content.ReadAsStringAsync();
@@ -159,7 +163,9 @@ public sealed class GitHubApiClient
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync();
-                return Result<bool>.Failure($"GitHub API error: {response.StatusCode} - {errorBody}");
+                return Result<bool>.Failure(
+                    $"GitHub API error: {response.StatusCode} - {errorBody}",
+                    (int)response.StatusCode);
             }
 
             return Result<bool>.Success(true);
@@ -194,12 +200,30 @@ public sealed class GitHubApiClient
                     return Result<List<TreeNode>>.Success(new List<TreeNode>());
                 }
 
-                return Result<List<TreeNode>>.Failure($"GitHub API error: {response.StatusCode} - {errorBody}");
+                return Result<List<TreeNode>>.Failure(
+                    $"GitHub API error: {response.StatusCode} - {errorBody}",
+                    (int)response.StatusCode);
             }
 
             var content = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(content);
             var root = doc.RootElement;
+
+            // GitHub caps the recursive tree response at ~100k entries or ~7 MB
+            // and sets "truncated": true when it drops entries. For a personal
+            // diary that limit would take centuries to reach, but if we ever
+            // hit it we'd silently miss files — surface a loud warning so it
+            // shows up in bug reports instead of manifesting as "some old
+            // entries just vanished from the sidebar".
+            if (root.TryGetProperty("truncated", out var truncated) &&
+                truncated.ValueKind == JsonValueKind.True)
+            {
+                Console.Error.WriteLine(
+                    "[GitDiary] GitHub tree response was truncated — the entry list is incomplete. " +
+                    "This means the repository has grown past GitHub's recursive-tree cap (~100k files / ~7 MB). " +
+                    "Consider splitting the diary into multiple repositories.");
+            }
+
             var tree = root.GetProperty("tree");
 
             var nodes = new List<TreeNode>();
@@ -251,7 +275,9 @@ public sealed class GitHubApiClient
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync();
-                return Result<string>.Failure($"GitHub API error: {response.StatusCode} - {errorBody}");
+                return Result<string>.Failure(
+                    $"GitHub API error: {response.StatusCode} - {errorBody}",
+                    (int)response.StatusCode);
             }
 
             var responseBody = await response.Content.ReadAsStringAsync();
@@ -276,18 +302,15 @@ public sealed class GitHubApiClient
         {
             // Try to clean up any leftover test file first
             var existing = await GetFileContentAsync(testPath);
-            if (existing.IsSuccess)
+            if (existing.IsSuccess && existing.Value is not null)
             {
-                var data = existing.Value!;
-                var sep = data.IndexOf('|');
-                if (sep >= 0)
-                    await DeleteFileAsync(testPath, data[..sep]);
+                await DeleteFileAsync(testPath, existing.Value.Sha);
             }
 
             // Create test file — if this succeeds, write works
             var result = await CreateFileAsync(testPath, "ok");
             if (result.IsFailure)
-                return Result<bool>.Failure(result.Error!);
+                return Result<bool>.Failure(result.Error!, result.StatusCode);
 
             // Clean up using the SHA from the create response
             if (!string.IsNullOrEmpty(result.Value))

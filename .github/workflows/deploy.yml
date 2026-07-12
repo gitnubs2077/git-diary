@@ -33,12 +33,32 @@ jobs:
         run: dotnet publish src/GitDiary.Client/GitDiary.Client.csproj --no-restore -c Release -o publish
 
       # Rewrite <base href="/"> so the app works under the repo subpath on
-      # <user>.github.io/<repo>/. Uses the repository name from the runner env.
+      # <user>.github.io/<repo>/. Historically this used a strict sed pattern
+      # that silently no-op'd if the tag's spacing or self-closing changed —
+      # the app would deploy but 404 in the browser. Two hardenings:
+      #   1. The regex tolerates whitespace variations and optional trailing '/'.
+      #   2. The Verify step below fails the deploy if the rewrite didn't land.
+      # We intentionally do NOT set -p:StaticWebAssetBasePath at publish time:
+      # the current .NET 10 SDK does not use it to rewrite <base href> for BWA,
+      # so relying on it would silently fail with no signal in the logs.
       - name: Rewrite base href
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
-          REPO_NAME="${GITHUB_REPOSITORY##*/}"
-          echo "Setting base href to /${REPO_NAME}/"
-          sed -i "s|<base href=\"/\" />|<base href=\"/${REPO_NAME}/\" />|g" publish/wwwroot/index.html
+          echo "Setting <base href> to /${REPO_NAME}/"
+          sed -Ei "s|<base[[:space:]]+href=\"/\"[[:space:]]*/?>|<base href=\"/${REPO_NAME}/\" />|g" publish/wwwroot/index.html
+
+      - name: Verify base href rewrite
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          if ! grep -q "<base href=\"/${REPO_NAME}/\"" publish/wwwroot/index.html; then
+            echo "::error::<base href> was not rewritten to /${REPO_NAME}/. The app would 404 in production."
+            echo "Found the following <base> line(s):"
+            grep -n '<base ' publish/wwwroot/index.html || true
+            exit 1
+          fi
+
       # Blazor ships filenames starting with '_' (e.g. _framework). GitHub
       # Pages runs Jekyll by default, which strips them. .nojekyll disables it.
       - name: Add .nojekyll
