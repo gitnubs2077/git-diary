@@ -17,6 +17,7 @@ builder.Services.AddScoped<DiaryRepository>();
 builder.Services.AddSingleton<IndexedDbRepository>();
 builder.Services.AddSingleton<SearchService>();
 builder.Services.AddScoped<LocalizationService>();
+builder.Services.AddScoped<ThemeService>();
 builder.Services.AddScoped<SyncService>();
 
 // Stores
@@ -28,5 +29,9 @@ var host = builder.Build();
 // Load persisted UI language from localStorage before the first render so the
 // Setup Wizard already shows in the user's preferred language.
 await host.Services.GetRequiredService<LocalizationService>().InitializeAsync();
+
+// Paint the persisted theme (or the OS preference for System mode) and start
+// watching the media query so live OS changes propagate.
+await host.Services.GetRequiredService<ThemeService>().InitializeAsync();
 
 await host.RunAsync();

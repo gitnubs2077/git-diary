@@ -5,6 +5,11 @@
   "sidebar.searchPlaceholder": "搜尋…",
   "sidebar.empty": "尚無日記。",
   "sidebar.language": "語言",
+  "sidebar.theme": "主題（目前：{0}）",
+
+  "theme.system": "跟隨系統",
+  "theme.light": "淺色",
+  "theme.dark": "深色",
 
   "editor.save": "💾 儲存",
   "editor.commit": "⏫ 提交",

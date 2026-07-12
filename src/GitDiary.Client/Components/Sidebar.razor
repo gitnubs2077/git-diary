@@ -6,7 +6,10 @@
 
 <div class="sidebar">
     <div class="sidebar-header">
-        <h3>@L["sidebar.title"]</h3>
+        <div class="sidebar-brand">
+            <img src="favicon.svg" alt="" class="sidebar-logo" aria-hidden="true" />
+            <h3>@L["sidebar.title"]</h3>
+        </div>
         <div class="sidebar-header-actions">
             <select
                 class="sidebar-lang"
@@ -18,6 +21,9 @@
                     <option value="@lang">@lang.DisplayName()</option>
                 }
             </select>
+            <button class="btn-icon" @onclick="CycleTheme" title="@ThemeTooltip">
+                @ThemeSvc.CurrentTheme.DisplayIcon()
+            </button>
             <button class="btn-icon" @onclick="OpenSettings" title="@L["sidebar.settings"]">⚙️</button>
             <button class="btn-new" @onclick="CreateTodayEntry">@L["sidebar.newToday"]</button>
         </div>
@@ -85,6 +91,9 @@
     [Inject]
     private LocalizationService L { get; set; } = default!;
 
+    [Inject]
+    private ThemeService ThemeSvc { get; set; } = default!;
+
     [Parameter]
     public EventCallback<DateOnly> OnEntrySelected { get; set; }
 
@@ -105,6 +114,7 @@
         await DiaryStore.RefreshEntriesAsync();
         DiaryStore.StateChanged += HandleStateChanged;
         L.StateChanged += HandleStateChanged;
+        ThemeSvc.StateChanged += HandleStateChanged;
 
         // Auto select today
         if (SelectedDate == null)
@@ -144,6 +154,32 @@
     private async Task OpenSettings()
     {
         await OnSettingsClicked.InvokeAsync();
+    }
+
+    // System → Light → Dark → System
+    private async Task CycleTheme()
+    {
+        var next = ThemeSvc.CurrentTheme switch
+        {
+            Theme.System => Theme.Light,
+            Theme.Light => Theme.Dark,
+            _ => Theme.System
+        };
+        await ThemeSvc.SetThemeAsync(next);
+    }
+
+    private string ThemeTooltip
+    {
+        get
+        {
+            var label = ThemeSvc.CurrentTheme switch
+            {
+                Theme.Light => L["theme.light"],
+                Theme.Dark => L["theme.dark"],
+                _ => L["theme.system"]
+            };
+            return L.Format("sidebar.theme", label);
+        }
     }
 
     private bool IsSelected(DateOnly date) => SelectedDate == date;
@@ -203,6 +239,7 @@
     {
         DiaryStore.StateChanged -= HandleStateChanged;
         L.StateChanged -= HandleStateChanged;
+        ThemeSvc.StateChanged -= HandleStateChanged;
     }
 
     private class YearGroup

@@ -2,6 +2,8 @@
 
 :root {
     --sidebar-width: 280px;
+
+    /* Dark palette (default before the boot script sets [data-theme]) */
     --bg-primary: #1a1b2e;
     --bg-secondary: #232540;
     --bg-tertiary: #2a2d4a;
@@ -16,6 +18,46 @@
     --border: #2d2f4a;
     --editor-bg: #1e2030;
     --sidebar-bg: #191a2e;
+    --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.4);
+    --overlay-bg: rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="dark"] {
+    --bg-primary: #1a1b2e;
+    --bg-secondary: #232540;
+    --bg-tertiary: #2a2d4a;
+    --text-primary: #e8e8f0;
+    --text-secondary: #9a9ab0;
+    --text-muted: #6a6a80;
+    --accent: #7c6fff;
+    --accent-hover: #958aff;
+    --danger: #ff4757;
+    --success: #2ed573;
+    --warning: #ffa502;
+    --border: #2d2f4a;
+    --editor-bg: #1e2030;
+    --sidebar-bg: #191a2e;
+    --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.4);
+    --overlay-bg: rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="light"] {
+    --bg-primary: #f7f7fb;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #eef0f6;
+    --text-primary: #1e2030;
+    --text-secondary: #4b4f66;
+    --text-muted: #8a8fa5;
+    --accent: #6558ff;
+    --accent-hover: #4c40f0;
+    --danger: #e63946;
+    --success: #1ca55a;
+    --warning: #d97706;
+    --border: #dfe2ec;
+    --editor-bg: #ffffff;
+    --sidebar-bg: #f0f1f7;
+    --shadow-modal: 0 16px 48px rgba(15, 20, 45, 0.15);
+    --overlay-bg: rgba(15, 20, 45, 0.35);
 }
 
 * {
@@ -92,6 +134,20 @@ html, body {
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--border);
+}
+
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.sidebar-logo {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    display: block;
 }
 
 .sidebar-header-actions {
@@ -544,7 +600,7 @@ html, body {
     max-height: 400px;
     overflow-y: auto;
     z-index: 100;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    box-shadow: var(--shadow-modal);
 }
 
 .search-results-header {
@@ -617,7 +673,7 @@ html, body {
     padding: 48px;
     width: 100%;
     max-width: 480px;
-    box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+    box-shadow: var(--shadow-modal);
 }
 
 .setup-header {
@@ -757,7 +813,7 @@ html, body {
     left: 0;
     bottom: 0;
     right: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--overlay-bg);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -788,7 +844,7 @@ html, body {
     left: 0;
     bottom: 0;
     right: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--overlay-bg);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -802,7 +858,7 @@ html, body {
     padding: 32px;
     width: 100%;
     max-width: 400px;
-    box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+    box-shadow: var(--shadow-modal);
 }
 
 .modal-content h3 {

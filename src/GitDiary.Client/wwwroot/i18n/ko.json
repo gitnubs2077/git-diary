@@ -5,6 +5,11 @@
   "sidebar.searchPlaceholder": "검색…",
   "sidebar.empty": "아직 일기가 없습니다.",
   "sidebar.language": "언어",
+  "sidebar.theme": "테마 (현재: {0})",
+
+  "theme.system": "시스템 설정",
+  "theme.light": "라이트",
+  "theme.dark": "다크",
 
   "editor.save": "💾 저장",
   "editor.commit": "⏫ 커밋",

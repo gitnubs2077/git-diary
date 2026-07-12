@@ -5,6 +5,11 @@
   "sidebar.searchPlaceholder": "検索…",
   "sidebar.empty": "まだ日記がありません。",
   "sidebar.language": "言語",
+  "sidebar.theme": "テーマ（現在：{0}）",
+
+  "theme.system": "システムに従う",
+  "theme.light": "ライト",
+  "theme.dark": "ダーク",
 
   "editor.save": "💾 保存",
   "editor.commit": "⏫ コミット",
