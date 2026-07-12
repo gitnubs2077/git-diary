@@ -8,9 +8,47 @@
     <base href="/" />
     <link rel="preload" id="webassembly" />
     <link rel="stylesheet" href="css/app.css" />
-    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="alternate icon" type="image/png" href="favicon.png" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
     <link href="GitDiary.Client.styles.css" rel="stylesheet" />
     <script type="importmap"></script>
+    <script>
+        // Theme boot + interop. Runs before the Blazor loader so the persisted (or
+        // OS-preferred) theme is applied to <html> before first paint — no dark flash.
+        (function () {
+            const html = document.documentElement;
+            const mql = window.matchMedia('(prefers-color-scheme: dark)');
+
+            function resolve(stored) {
+                if (stored === 'light' || stored === 'dark') return stored;
+                return mql.matches ? 'dark' : 'light';
+            }
+
+            let stored = null;
+            try { stored = localStorage.getItem('gitdiary_theme'); } catch (_) { /* ignore */ }
+            html.dataset.theme = resolve(stored);
+
+            window.gitdiaryTheme = {
+                getSystemPrefersDark: function () { return mql.matches; },
+                applyTheme: function (resolved) {
+                    if (resolved === 'light' || resolved === 'dark') {
+                        html.dataset.theme = resolved;
+                    }
+                },
+                watchSystem: function (dotNetRef) {
+                    const handler = function (e) {
+                        dotNetRef.invokeMethodAsync('OnSystemThemeChanged', e.matches);
+                    };
+                    if (mql.addEventListener) {
+                        mql.addEventListener('change', handler);
+                    } else if (mql.addListener) {
+                        mql.addListener(handler);
+                    }
+                }
+            };
+        })();
+    </script>
 </head>
 
 <body>

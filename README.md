@@ -1,6 +1,8 @@
 <div align="center">
 
-# 📔 GitDiary
+<img src="./docs/logo.svg" alt="GitDiary logo" width="128" height="128" />
+
+# GitDiary
 
 **A minimalist personal diary that lives inside your own GitHub repository.**
 

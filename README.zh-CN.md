@@ -1,6 +1,8 @@
 <div align="center">
 
-# 📔 GitDiary
+<img src="./docs/logo.svg" alt="GitDiary logo" width="128" height="128" />
+
+# GitDiary
 
 **一个把日记直接存进你自己 GitHub 仓库的极简写作工具。**
 
