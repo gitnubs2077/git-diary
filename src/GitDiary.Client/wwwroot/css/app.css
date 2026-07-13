@@ -464,7 +464,6 @@ html, body {
 
 .btn-save,
 .btn-commit,
-.btn-preview-toggle,
 .btn-delete {
     padding: 6px 14px;
     border: 1px solid var(--border);
@@ -500,10 +499,41 @@ html, body {
     border-color: var(--accent-hover);
 }
 
-.btn-preview-toggle:hover {
+/* Segmented control: Edit / Preview / Split. Three buttons share a single
+   rounded border; internal 1px dividers separate them. Active button paints
+   with the accent color to mirror commit-button styling and telegraph "this
+   is the current mode". */
+.view-mode-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bg-tertiary);
+}
+
+.view-mode-btn {
+    padding: 6px 12px;
+    border: none;
+    border-left: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.view-mode-btn:first-child {
+    border-left: none;
+}
+
+.view-mode-btn:hover:not(.active) {
+    background: var(--bg-secondary);
+}
+
+.view-mode-btn.active {
     background: var(--accent);
     color: white;
-    border-color: var(--accent);
 }
 
 .btn-delete:hover {
@@ -516,6 +546,20 @@ html, body {
     flex: 1;
     display: flex;
     overflow: hidden;
+}
+
+/* Split mode: textarea and preview render side by side (both flex: 1),
+   separated by a thin divider. On narrow viewports the preview column is
+   hidden but the user's ViewMode preference is preserved — resizing back
+   wider brings Split back automatically. */
+.editor-content.split .editor-preview {
+    border-left: 1px solid var(--border);
+}
+
+@media (max-width: 1000px) {
+    .editor-content.split .editor-preview {
+        display: none;
+    }
 }
 
 .editor-textarea {

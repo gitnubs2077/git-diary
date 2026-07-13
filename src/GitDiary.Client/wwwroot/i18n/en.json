@@ -19,6 +19,8 @@
   "editor.commitTooltip": "Push the current draft to GitHub",
   "editor.edit": "Edit",
   "editor.preview": "Preview",
+  "editor.split": "Split",
+  "editor.viewMode": "View mode",
   "editor.delete": "Delete",
   "editor.placeholder": "Start writing your diary...",
   "editor.loading": "Loading...",

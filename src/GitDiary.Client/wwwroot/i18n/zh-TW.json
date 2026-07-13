@@ -19,6 +19,8 @@
   "editor.commitTooltip": "將目前的草稿推送到 GitHub",
   "editor.edit": "編輯",
   "editor.preview": "預覽",
+  "editor.split": "分割",
+  "editor.viewMode": "檢視模式",
   "editor.delete": "刪除",
   "editor.placeholder": "開始撰寫你的日記…",
   "editor.loading": "載入中…",

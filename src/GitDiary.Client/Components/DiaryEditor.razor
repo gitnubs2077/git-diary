@@ -22,17 +22,34 @@
                         title="@L["editor.commitTooltip"]">
                     @CommitButtonLabel
                 </button>
-                <button class="btn-preview-toggle" @onclick="TogglePreview">
-                    @(ShowPreview ? $"✏️ {L["editor.edit"]}" : $"👁️ {L["editor.preview"]}")
-                </button>
+                <div class="view-mode-toggle" role="group" aria-label="@L["editor.viewMode"]">
+                    <button type="button"
+                            class="view-mode-btn @(_viewMode == ViewMode.Edit ? "active" : "")"
+                            @onclick="() => SetViewModeAsync(ViewMode.Edit)"
+                            aria-pressed="@(_viewMode == ViewMode.Edit)">
+                        ✏️ @L["editor.edit"]
+                    </button>
+                    <button type="button"
+                            class="view-mode-btn @(_viewMode == ViewMode.Preview ? "active" : "")"
+                            @onclick="() => SetViewModeAsync(ViewMode.Preview)"
+                            aria-pressed="@(_viewMode == ViewMode.Preview)">
+                        👁️ @L["editor.preview"]
+                    </button>
+                    <button type="button"
+                            class="view-mode-btn @(_viewMode == ViewMode.Split ? "active" : "")"
+                            @onclick="() => SetViewModeAsync(ViewMode.Split)"
+                            aria-pressed="@(_viewMode == ViewMode.Split)">
+                        ⬒ @L["editor.split"]
+                    </button>
+                </div>
                 <button class="btn-delete" @onclick="ConfirmDelete">
                     🗑️ @L["editor.delete"]
                 </button>
             </div>
         </div>
 
-        <div class="editor-content">
-            @if (!ShowPreview)
+        <div class="editor-content @(_viewMode == ViewMode.Split ? "split" : string.Empty)">
+            @if (_viewMode != ViewMode.Preview)
             {
                 <textarea
                     class="editor-textarea"
@@ -42,11 +59,14 @@
                     rows="20"
                     placeholder="@L["editor.placeholder"]"></textarea>
             }
-            else
+            @if (_viewMode != ViewMode.Edit)
             {
-                <div class="editor-preview markdown-body" @ref="_previewRef">
-                    @MarkdownContent
-                </div>
+                @* Contents are set via `gitdiaryPreview.setHtml` in OnAfterRenderAsync
+                   — Blazor must NOT diff this element's children. Otherwise mermaid's
+                   `replaceWith` (which orphans the <pre><code> nodes) causes Blazor
+                   to crash on the next render with `Cannot read properties of null
+                   (reading 'removeChild')`. See preview-interop.js for the rationale. *@
+                <div class="editor-preview markdown-body" @ref="_previewRef"></div>
             }
         </div>
     }
@@ -104,16 +124,29 @@
     [Inject]
     private IJSRuntime JS { get; set; } = default!;
 
-    private bool ShowPreview;
+    private enum ViewMode { Edit, Preview, Split }
+
+    // Persistence key + accepted string values for the view-mode preference.
+    // Values match the ThemeService/LocalizationService convention (lowercase).
+    private const string ViewModeStorageKey = "gitdiary_view_mode";
+
+    private ViewMode _viewMode = ViewMode.Edit;
     private bool ShowDeleteConfirm;
     private ElementReference _deleteDialogRef;
     private ElementReference _deleteConfirmRef;
     private ElementReference _previewRef;
     private bool _focusDeleteConfirm;
-    // Tracks the (content, theme) tuple that was last handed to the mermaid
-    // interop so we don't re-invoke JS on every unrelated re-render. Null
-    // signals "preview is not currently mounted".
-    private string? _lastMermaidContent;
+    // While the 2s debounce is armed, the user is actively typing — we pin
+    // the preview to this snapshot so mermaid/Markdig don't rebuild per key.
+    // Outside of a typing window, `MarkdownContent` reads DiaryStore.CurrentContent
+    // directly, which sidesteps any subtlety about notification ordering during
+    // entry-load transitions.
+    private string _previewSnapshot = string.Empty;
+    // Tracks the (source, theme) tuple that was last pushed to the preview
+    // via `gitdiaryPreview.setHtml` / `gitdiaryMermaid.render`. Both are null
+    // when the preview isn't mounted; a null `_lastPreviewSource` forces the
+    // next mount to push HTML fresh even if the source happens to be "".
+    private string? _lastPreviewSource;
     private string? _lastMermaidTheme;
     // In-flight guards. `disabled="@..."` only takes effect after Blazor re-renders,
     // and a rapid double-click can re-enter the click handler before that render
@@ -128,7 +161,18 @@
     // keystroke could race and produce a duplicate SaveDraftAsync. Task.Delay
     // observes the token cooperatively, closing that window cleanly.
     private CancellationTokenSource? _debounceCts;
-    private MarkupString MarkdownContent => RenderMarkdown(DiaryStore.CurrentContent);
+
+    // Preview source of truth. While a keystroke debounce is armed the user is
+    // actively typing — pin the preview to `_previewSnapshot` so Markdig and
+    // mermaid don't rebuild per key. In every other state (loads, saves, mode
+    // switches, idle) fall through to the live buffer, which is always fresh
+    // and doesn't depend on any store-notification ordering. This is what makes
+    // "switch diary entry" refresh the preview reliably no matter how many
+    // times it happens.
+    private string PreviewSource =>
+        _debounceCts is not null
+            ? _previewSnapshot
+            : (DiaryStore.CurrentContent ?? string.Empty);
 
     // Commit button is enabled whenever there's a local draft or unsaved changes,
     // and disabled while a commit is already in flight.
@@ -151,6 +195,41 @@
         L.StateChanged += HandleStoreChanged;
         ThemeSvc.StateChanged += HandleThemeChanged;
     }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Restore the persisted view-mode preference. A brief 1-frame flash from
+        // the default (Edit) to the stored value is acceptable — same trade-off
+        // ThemeService makes without an inline boot script.
+        string? code = null;
+        try
+        {
+            code = await JS.InvokeAsync<string?>("localStorage.getItem", ViewModeStorageKey);
+        }
+        catch
+        {
+            // localStorage unavailable — keep default.
+        }
+
+        var restored = ParseViewMode(code);
+        if (restored != _viewMode)
+        {
+            _viewMode = restored;
+            // Seed the snapshot so the preview isn't blank on first paint when
+            // we come up already in Preview / Split.
+            if (_viewMode != ViewMode.Edit)
+            {
+                _previewSnapshot = DiaryStore.CurrentContent ?? string.Empty;
+            }
+        }
+    }
+
+    private static ViewMode ParseViewMode(string? code) => code switch
+    {
+        "preview" => ViewMode.Preview,
+        "split" => ViewMode.Split,
+        _ => ViewMode.Edit,
+    };
 
     private void HandleThemeChanged()
     {
@@ -175,16 +254,38 @@
         }
     }
 
-    private async Task TogglePreview()
+    private async Task SetViewModeAsync(ViewMode mode)
     {
-        // Flush any pending local save before switching views so the preview is fresh.
-        if (DiaryStore.IsDirty)
+        if (_viewMode == mode) return;
+
+        // Leaving Edit: flush any pending local save so the freshly-visible
+        // preview reflects the latest keystrokes. Mirrors the pre-split
+        // TogglePreview behavior.
+        if (_viewMode == ViewMode.Edit && DiaryStore.IsDirty)
         {
             CancelDebounce();
             await DiaryStore.SaveDraftAsync();
         }
 
-        ShowPreview = !ShowPreview;
+        _viewMode = mode;
+
+        // Entering any preview-visible mode: refresh the snapshot now so the
+        // pane isn't blank / stale for the debounce window.
+        if (mode != ViewMode.Edit)
+        {
+            _previewSnapshot = DiaryStore.CurrentContent ?? string.Empty;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem",
+                ViewModeStorageKey, mode.ToString().ToLowerInvariant());
+        }
+        catch
+        {
+            // Ignore — in-memory state still reflects the choice.
+        }
+
         await InvokeAsync(StateHasChanged);
     }
 
@@ -204,6 +305,15 @@
 
     private void ScheduleDebouncedAutoSave()
     {
+        // Transitioning from "not typing" → "typing": capture the current
+        // buffer as the snapshot the preview will pin to for the next 2s.
+        // Without this, PreviewSource would return an empty _previewSnapshot
+        // on the very first typing burst after mount and the pane would
+        // flash blank between keystrokes.
+        if (_debounceCts is null)
+        {
+            _previewSnapshot = DiaryStore.CurrentContent ?? string.Empty;
+        }
         CancelDebounce();
         var cts = new CancellationTokenSource();
         _debounceCts = cts;
@@ -256,12 +366,22 @@
         {
             await DiaryStore.SaveDraftAsync();
         }
+
+        // Refresh the preview snapshot in step with the autosave tick. This is
+        // the mechanism that gives Split its "updates every 2s after you stop
+        // typing" feel without wiring a second timer.
+        _previewSnapshot = DiaryStore.CurrentContent ?? string.Empty;
+        StateHasChanged();
     }
 
     private async Task SaveAsync()
     {
         CancelDebounce();
         await DiaryStore.SaveDraftAsync();
+        // Ctrl+S is an explicit "make it happen now" signal — refresh the
+        // preview immediately rather than waiting for the (now-cancelled)
+        // debounce tick.
+        _previewSnapshot = DiaryStore.CurrentContent ?? string.Empty;
     }
 
     private async Task CommitAsync()
@@ -323,27 +443,50 @@
             }
         }
 
-        await RenderMermaidIfNeededAsync();
+        await UpdatePreviewAsync();
     }
 
-    private async Task RenderMermaidIfNeededAsync()
+    private async Task UpdatePreviewAsync()
     {
-        if (!ShowPreview)
+        // The preview <div> only exists when both `_viewMode != Edit` AND an
+        // entry is loaded (see the outer `if (CurrentEntry is not null)` in
+        // markup). Without the second check, a persisted Split preference from
+        // localStorage causes us to call into JS on an unmounted ref — Blazor
+        // marshals a default ElementReference and JS crashes.
+        if (_viewMode == ViewMode.Edit || DiaryStore.CurrentEntry is null)
         {
-            // Preview is not in the DOM; clear tracking so the next open re-invokes.
-            _lastMermaidContent = null;
+            // Preview isn't in the DOM; forget tracking so the next open re-pushes.
+            _lastPreviewSource = null;
             _lastMermaidTheme = null;
             return;
         }
 
-        var content = DiaryStore.CurrentContent ?? string.Empty;
+        var source = PreviewSource;
         var theme = ThemeSvc.ResolvedTheme.Code();
-        if (_lastMermaidContent == content && _lastMermaidTheme == theme)
+        var sourceChanged = _lastPreviewSource != source;
+        var themeChanged = _lastMermaidTheme != theme;
+        if (!sourceChanged && !themeChanged) return;
+
+        if (sourceChanged)
         {
-            return;
+            // JS-managed innerHTML: mermaid's `replaceWith` mutations inside this
+            // container are safe because Blazor does NOT diff the preview's
+            // children (see preview-interop.js). Pushing new HTML also implicitly
+            // wipes any prior mermaid SVGs — they'll be rebuilt from the fresh
+            // `<pre><code>` blocks the interop finds.
+            var html = RenderMarkdownHtml(source);
+            try
+            {
+                await JS.InvokeVoidAsync("gitdiaryPreview.setHtml", _previewRef, html);
+                _lastPreviewSource = source;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[GitDiary] DiaryEditor.setHtml: {ex.GetType().Name}: {ex.Message}");
+                return;
+            }
         }
 
-        _lastMermaidContent = content;
         _lastMermaidTheme = theme;
         try
         {
@@ -389,17 +532,16 @@
         await DiaryStore.LoadEntryAsync(today);
     }
 
-    private MarkupString RenderMarkdown(string content)
+    private static string RenderMarkdownHtml(string content)
     {
         if (string.IsNullOrEmpty(content))
-            return new MarkupString("");
+            return string.Empty;
 
         // Use a sanitizing pipeline that strips inline HTML and rewrites
         // javascript:/vbscript:/data: URLs. Without this the Markdown preview
         // is a stored-XSS sink that can exfiltrate the GitHub PAT from
         // localStorage. See P0-SEC-1 in the release audit.
-        var html = Markdown.ToHtml(content, SafeMarkdownPipeline);
-        return new MarkupString(html);
+        return Markdown.ToHtml(content, SafeMarkdownPipeline);
     }
 
     private static readonly MarkdownPipeline SafeMarkdownPipeline = BuildSafePipeline();

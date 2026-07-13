@@ -19,6 +19,8 @@
   "editor.commitTooltip": "将当前草稿推送到 GitHub",
   "editor.edit": "编辑",
   "editor.preview": "预览",
+  "editor.split": "双栏",
+  "editor.viewMode": "视图模式",
   "editor.delete": "删除",
   "editor.placeholder": "开始写下你的日记…",
   "editor.loading": "加载中…",
