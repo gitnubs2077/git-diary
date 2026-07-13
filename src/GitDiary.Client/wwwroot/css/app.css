@@ -563,6 +563,36 @@ html, body {
     border-color: var(--danger);
 }
 
+/* External-jump link in the editor toolbar: styled as a peer of btn-save /
+   btn-commit / btn-delete but rendered as an <a target="_blank"> so users get
+   the browser's built-in "open in new tab" affordance. */
+.btn-github-link {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    line-height: 1;
+}
+
+.btn-github-link:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.btn-github-link:visited {
+    color: var(--text-primary);
+}
+
 .editor-content {
     flex: 1;
     display: flex;

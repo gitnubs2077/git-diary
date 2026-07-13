@@ -32,6 +32,8 @@
   "editor.cancel": "取消",
   "editor.confirmDelete": "删除",
   "editor.emptyCta": "写下今天的日记",
+  "editor.viewOnGitHub": "GitHub",
+  "editor.viewOnGitHubTooltip": "在 GitHub 打开这篇日记",
 
   "setup.subtitleWelcome": "欢迎！让我们来设置你的日记。",
   "setup.subtitleUpdate": "更新你的 GitHub 仓库设置。",
@@ -47,6 +49,7 @@
   "setup.placeholderToken": "github_pat_...",
   "setup.tokenHint": "需要仓库 Contents 权限（读取和写入）。",
   "setup.createToken": "创建令牌 →",
+  "setup.viewRepo": "在 GitHub 打开仓库 →",
   "setup.cancel": "取消",
   "setup.footer": "令牌仅存储在你的浏览器中，绝不会上传。",
   "setup.errorCannotConnect": "无法连接到仓库：{0}",

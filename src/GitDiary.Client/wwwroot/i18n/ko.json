@@ -32,6 +32,8 @@
   "editor.cancel": "취소",
   "editor.confirmDelete": "삭제",
   "editor.emptyCta": "오늘의 일기 쓰기",
+  "editor.viewOnGitHub": "GitHub",
+  "editor.viewOnGitHubTooltip": "이 일기를 GitHub에서 열기",
 
   "setup.subtitleWelcome": "환영합니다! 일기를 설정해 봅시다.",
   "setup.subtitleUpdate": "GitHub 저장소 설정을 업데이트합니다.",
@@ -47,6 +49,7 @@
   "setup.placeholderToken": "github_pat_...",
   "setup.tokenHint": "저장소 Contents 권한(읽기 및 쓰기)이 필요합니다.",
   "setup.createToken": "토큰 만들기 →",
+  "setup.viewRepo": "GitHub에서 저장소 열기 →",
   "setup.cancel": "취소",
   "setup.footer": "토큰은 브라우저에만 저장되며 절대 업로드되지 않습니다.",
   "setup.errorCannotConnect": "저장소에 연결할 수 없습니다: {0}",

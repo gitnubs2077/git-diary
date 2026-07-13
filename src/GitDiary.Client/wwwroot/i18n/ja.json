@@ -32,6 +32,8 @@
   "editor.cancel": "キャンセル",
   "editor.confirmDelete": "削除",
   "editor.emptyCta": "今日の日記を書く",
+  "editor.viewOnGitHub": "GitHub",
+  "editor.viewOnGitHubTooltip": "この日記を GitHub で開く",
 
   "setup.subtitleWelcome": "ようこそ！日記をセットアップしましょう。",
   "setup.subtitleUpdate": "GitHub リポジトリの設定を更新します。",
@@ -47,6 +49,7 @@
   "setup.placeholderToken": "github_pat_...",
   "setup.tokenHint": "リポジトリの Contents 権限（読み取りと書き込み）が必要です。",
   "setup.createToken": "トークンを作成 →",
+  "setup.viewRepo": "GitHub でリポジトリを開く →",
   "setup.cancel": "キャンセル",
   "setup.footer": "トークンはブラウザ内にのみ保存され、アップロードされません。",
   "setup.errorCannotConnect": "リポジトリに接続できません：{0}",

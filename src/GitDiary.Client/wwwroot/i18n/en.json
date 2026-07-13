@@ -32,6 +32,8 @@
   "editor.cancel": "Cancel",
   "editor.confirmDelete": "Delete",
   "editor.emptyCta": "Write today's entry",
+  "editor.viewOnGitHub": "GitHub",
+  "editor.viewOnGitHubTooltip": "Open this entry on GitHub",
 
   "setup.subtitleWelcome": "Welcome! Let's set up your diary.",
   "setup.subtitleUpdate": "Update your GitHub repository settings.",
@@ -47,6 +49,7 @@
   "setup.placeholderToken": "github_pat_...",
   "setup.tokenHint": "Requires repository Contents permission (Read and Write).",
   "setup.createToken": "Create a token →",
+  "setup.viewRepo": "View repository on GitHub →",
   "setup.cancel": "Cancel",
   "setup.footer": "Your token is stored only in your browser. Never uploaded.",
   "setup.errorCannotConnect": "Cannot connect to repository: {0}",

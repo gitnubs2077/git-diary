@@ -1,4 +1,5 @@
 using System.Globalization;
+using GitDiary.Client.Models;
 
 namespace GitDiary.Client.Infrastructure;
 
@@ -78,4 +79,34 @@ public static class PathHelper
         DateOnly.FromDateTime(DateTimeOffset.Now.LocalDateTime);
 
     public static string GetTitle(DateOnly date) => date.ToString("yyyy-MM-dd");
+
+    /// <summary>
+    /// Builds the browser URL for the repository root on github.com. Returns
+    /// <c>null</c> when the config is missing owner/repo — the caller decides
+    /// whether to hide the affordance or show a disabled state.
+    /// </summary>
+    public static string? GetGitHubRepoUrl(RepositoryConfig? config)
+    {
+        if (config is null) return null;
+        if (string.IsNullOrEmpty(config.Owner) || string.IsNullOrEmpty(config.Repo))
+            return null;
+
+        // Owner/repo pass the SetupWizard regex (letters/digits/./_/-), so no
+        // percent-encoding is required for realistic inputs. Branch may contain
+        // slashes (e.g. `release/1.0`) which GitHub accepts verbatim in the URL.
+        return $"https://github.com/{config.Owner}/{config.Repo}";
+    }
+
+    /// <summary>
+    /// Builds the browser URL for a specific diary file on github.com. Uses
+    /// <c>/blob/{branch}/{path}</c> so the user lands on the rendered file
+    /// view. Returns <c>null</c> when required config is missing.
+    /// </summary>
+    public static string? GetGitHubFileUrl(RepositoryConfig? config, DateOnly date)
+    {
+        var repoUrl = GetGitHubRepoUrl(config);
+        if (repoUrl is null) return null;
+        var branch = string.IsNullOrEmpty(config!.Branch) ? "main" : config.Branch;
+        return $"{repoUrl}/blob/{branch}/{GetPath(date)}";
+    }
 }

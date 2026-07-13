@@ -41,6 +41,12 @@
                     placeholder="@L["setup.placeholderRepo"]"
                     value="@Repo"
                     @oninput="OnRepoInput" />
+                @if (RepoUrl is not null)
+                {
+                    <small class="form-hint">
+                        <a href="@RepoUrl" target="_blank" rel="noopener noreferrer">@L["setup.viewRepo"]</a>
+                    </small>
+                }
             </div>
 
             <div class="form-group">
@@ -150,6 +156,23 @@
         !string.IsNullOrWhiteSpace(Owner) &&
         !string.IsNullOrWhiteSpace(Repo) &&
         !string.IsNullOrWhiteSpace(Token);
+
+    // Live-preview link to github.com/{owner}/{repo}. Appears the moment both
+    // Owner and Repo have any non-whitespace content — Blazor re-renders on
+    // every @oninput so the affordance shows up as the user types. We don't
+    // gate on regex validation here: even a malformed URL that 404s is more
+    // useful than nothing, because it lets the user see exactly what GitDiary
+    // will hit and correct typos in-place.
+    private string? RepoUrl
+    {
+        get
+        {
+            var owner = Owner?.Trim() ?? "";
+            var repo = Repo?.Trim() ?? "";
+            if (string.IsNullOrEmpty(owner) || string.IsNullOrEmpty(repo)) return null;
+            return $"https://github.com/{owner}/{repo}";
+        }
+    }
 
     protected override void OnInitialized()
     {

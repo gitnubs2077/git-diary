@@ -45,6 +45,16 @@
                 <button class="btn-delete" @onclick="ConfirmDelete">
                     🗑️ @L["editor.delete"]
                 </button>
+                @if (GitHubFileUrl is not null)
+                {
+                    <a class="btn-github-link"
+                       href="@GitHubFileUrl"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       title="@L["editor.viewOnGitHubTooltip"]">
+                        🔗 @L["editor.viewOnGitHub"]
+                    </a>
+                }
             </div>
         </div>
 
@@ -114,6 +124,9 @@
 @code {
     [Inject]
     private DiaryStore DiaryStore { get; set; } = default!;
+
+    [Inject]
+    private SettingsStore SettingsStore { get; set; } = default!;
 
     [Inject]
     private LocalizationService L { get; set; } = default!;
@@ -188,6 +201,14 @@
         SyncState.Failed => $"🔁 {L["editor.retryCommit"]}",
         _ => $"⏫ {L["editor.commit"]}"
     };
+
+    // Deep link to the corresponding Markdown file on github.com. Only surfaced
+    // once the entry actually exists remotely (non-empty SHA) — otherwise the
+    // link would 404 for anything the user has typed locally but not committed.
+    private string? GitHubFileUrl =>
+        DiaryStore.CurrentEntry is { } entry && !string.IsNullOrEmpty(entry.Sha)
+            ? PathHelper.GetGitHubFileUrl(SettingsStore.Config, entry.Date)
+            : null;
 
     protected override void OnInitialized()
     {
