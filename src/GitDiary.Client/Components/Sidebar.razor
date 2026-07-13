@@ -82,6 +82,13 @@
                                             aria-current="@(IsSelected(entry.Date) ? "true" : "false")"
                                             @onclick="() => SelectEntry(entry.Date)"
                                             @onkeydown="e => OnActivateKey(e, () => SelectEntry(entry.Date))">
+                                            @if (IsLoadingEntry(entry.Date))
+                                            {
+                                                <span class="entry-spinner"
+                                                      role="status"
+                                                      aria-label="@L["sidebar.loading"]"
+                                                      title="@L["sidebar.loading"]"></span>
+                                            }
                                             @entry.Date.ToString("yyyy-MM-dd")
                                             @if (IsToday(entry.Date))
                                             {
@@ -250,8 +257,8 @@
     private async Task CreateTodayEntry()
     {
         var today = PathHelper.GetToday();
-        await DiaryStore.LoadEntryAsync(today);
         SelectedDate = today;
+        await DiaryStore.LoadEntryAsync(today);
     }
 
     private async Task OpenSettings()
@@ -288,6 +295,13 @@
     private bool IsSelected(DateOnly date) => SelectedDate == date;
 
     private bool IsToday(DateOnly date) => date == PathHelper.GetToday();
+
+    // Only the currently-selected entry can be loading — DiaryStore serves one
+    // entry at a time — so we key the spinner off both flags. SelectedDate is
+    // updated synchronously before LoadEntryAsync awaits, so the spinner
+    // appears on the target row from the first render.
+    private bool IsLoadingEntry(DateOnly date) =>
+        DiaryStore.IsLoading && SelectedDate == date;
 
     // Turns Enter / Space presses on role="button" divs into activations. Space
     // must be intercepted synchronously so the browser's default page-scroll

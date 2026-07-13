@@ -6,6 +6,7 @@
   "sidebar.empty": "No diary entries yet.",
   "sidebar.language": "Language",
   "sidebar.theme": "Theme (current: {0})",
+  "sidebar.loading": "Loading entry…",
 
   "theme.system": "System",
   "theme.light": "Light",

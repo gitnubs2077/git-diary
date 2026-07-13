@@ -388,6 +388,27 @@ html, body {
     color: rgba(255, 255, 255, 0.9);
 }
 
+/* Inline "菊花" spinner that appears while an entry is being fetched from
+   GitHub. Floated right so it sits opposite the date text without disrupting
+   the existing block-level padding. currentColor keeps it readable against
+   both the default and the .selected accent background. */
+.diary-entry-item .entry-spinner {
+    float: right;
+    width: 12px;
+    height: 12px;
+    margin-top: 3px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-right-color: currentColor;
+    border-radius: 50%;
+    opacity: 0.75;
+    animation: entry-spin 0.7s linear infinite;
+}
+
+@keyframes entry-spin {
+    to { transform: rotate(360deg); }
+}
+
 .sidebar-empty {
     padding: 32px 16px;
     text-align: center;

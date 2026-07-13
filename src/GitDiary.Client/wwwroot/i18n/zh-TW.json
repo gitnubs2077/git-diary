@@ -6,6 +6,7 @@
   "sidebar.empty": "尚無日記。",
   "sidebar.language": "語言",
   "sidebar.theme": "主題（目前：{0}）",
+  "sidebar.loading": "載入中…",
 
   "theme.system": "跟隨系統",
   "theme.light": "淺色",

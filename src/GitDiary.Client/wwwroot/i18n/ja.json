@@ -6,6 +6,7 @@
   "sidebar.empty": "まだ日記がありません。",
   "sidebar.language": "言語",
   "sidebar.theme": "テーマ（現在：{0}）",
+  "sidebar.loading": "読み込み中…",
 
   "theme.system": "システムに従う",
   "theme.light": "ライト",
