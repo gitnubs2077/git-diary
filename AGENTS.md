@@ -33,6 +33,12 @@ dotnet watch run        # Hot reload
 
 Dependencies: `Markdig` (Markdown render), `Blazored.LocalStorage`.
 
+## Git Workflow
+
+**Single-branch project.** All commits go directly on `main`. Do **not** create feature branches, do not open PRs, do not fast-forward from a side branch. This overrides any agent-harness default that says "branch first when on the default branch" — this repository is a personal single-user app and that ceremony adds no value.
+
+Still applies: only commit or push when the user asks.
+
 ## Architecture Rules
 
 **Layer constraints** (enforced by convention, not compiler):
