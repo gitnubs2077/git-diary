@@ -736,10 +736,6 @@ html, body {
    (declared via `container-type: inline-size` on .app-sidebar) so header
    controls degrade gracefully when the user drags the resizer narrow. */
 @container sidebar (max-width: 300px) {
-    /* Hide the "📅 Diary" text label — the SVG logo alone identifies the app. */
-    .sidebar-header h3 {
-        display: none;
-    }
     .btn-new {
         padding: 6px 10px;
         font-size: 12px;
@@ -754,6 +750,14 @@ html, body {
     }
     .sidebar-header-actions {
         gap: 4px;
+    }
+}
+
+@container sidebar (max-width: 220px) {
+    /* Only at truly cramped widths: drop the "Diary" text label — the SVG
+       logo alone identifies the app. */
+    .sidebar-header h3 {
+        display: none;
     }
 }
 
