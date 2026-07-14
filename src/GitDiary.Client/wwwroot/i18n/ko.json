@@ -4,7 +4,6 @@
   "sidebar.newToday": "+ 오늘",
   "sidebar.searchPlaceholder": "검색…",
   "sidebar.empty": "아직 일기가 없습니다.",
-  "sidebar.language": "언어",
   "sidebar.theme": "테마 (현재: {0})",
   "sidebar.theme.pickerLabel": "테마 선택",
   "sidebar.loading": "불러오는 중…",

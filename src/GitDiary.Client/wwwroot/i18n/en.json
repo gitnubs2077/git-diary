@@ -4,7 +4,6 @@
   "sidebar.newToday": "+ Today",
   "sidebar.searchPlaceholder": "Search...",
   "sidebar.empty": "No diary entries yet.",
-  "sidebar.language": "Language",
   "sidebar.theme": "Theme (current: {0})",
   "sidebar.theme.pickerLabel": "Choose theme",
   "sidebar.loading": "Loading entry…",

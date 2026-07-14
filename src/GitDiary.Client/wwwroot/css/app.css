@@ -551,22 +551,6 @@ html, body {
     flex-shrink: 0;
 }
 
-.sidebar-lang {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 3px 6px;
-    font-size: 12px;
-    cursor: pointer;
-    outline: none;
-    max-width: 120px;
-}
-
-.sidebar-lang:hover {
-    border-color: var(--accent);
-}
-
 .sidebar-header h3 {
     font-size: 16px;
     font-weight: 600;
@@ -751,21 +735,10 @@ html, body {
 /* Sidebar container-query adaptations. Trigger off the sidebar's own width
    (declared via `container-type: inline-size` on .app-sidebar) so header
    controls degrade gracefully when the user drags the resizer narrow. */
-@container sidebar (max-width: 340px) {
-    .sidebar-lang {
-        max-width: 96px;
-    }
-}
-
 @container sidebar (max-width: 300px) {
     /* Hide the "📅 Diary" text label — the SVG logo alone identifies the app. */
     .sidebar-header h3 {
         display: none;
-    }
-    .sidebar-lang {
-        max-width: 80px;
-        padding: 3px 4px;
-        font-size: 11px;
     }
     .btn-new {
         padding: 6px 10px;
@@ -781,9 +754,6 @@ html, body {
     }
     .sidebar-header-actions {
         gap: 4px;
-    }
-    .sidebar-lang {
-        max-width: 68px;
     }
 }
 

@@ -13,16 +13,6 @@
             <h3>@L["sidebar.title"]</h3>
         </div>
         <div class="sidebar-header-actions">
-            <select
-                class="sidebar-lang"
-                value="@L.CurrentLanguage.Code()"
-                @onchange="OnLanguageChanged"
-                title="@L["sidebar.language"]">
-                @foreach (var lang in L.AvailableLanguages)
-                {
-                    <option value="@lang.Code()">@lang.DisplayName()</option>
-                }
-            </select>
             <div class="theme-picker">
                 <button class="btn-icon"
                         @onclick="ToggleThemeMenu"
@@ -285,15 +275,6 @@
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[GitDiary] Sidebar.HandleStateChanged: {ex.GetType().Name}: {ex.Message}");
-        }
-    }
-
-    private async Task OnLanguageChanged(ChangeEventArgs e)
-    {
-        if (e.Value is string code)
-        {
-            var lang = LanguageExtensions.FromCode(code);
-            await L.SetLanguageAsync(lang);
         }
     }
 
