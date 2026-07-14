@@ -6,11 +6,21 @@
   "sidebar.empty": "暂无日记。",
   "sidebar.language": "语言",
   "sidebar.theme": "主题（当前：{0}）",
+  "sidebar.theme.pickerLabel": "选择主题",
   "sidebar.loading": "加载中…",
 
+  "theme.modeHeading": "亮/暗",
   "theme.system": "跟随系统",
   "theme.light": "浅色",
   "theme.dark": "深色",
+
+  "skin.heading": "皮肤",
+  "skin.default": "默认",
+  "skin.fluent": "Fluent 风",
+  "skin.windowsXp": "Windows XP",
+  "skin.mac": "macOS",
+  "skin.solarized": "Solarized",
+  "skin.sepia": "羊皮纸",
 
   "editor.save": "保存",
   "editor.commit": "提交",

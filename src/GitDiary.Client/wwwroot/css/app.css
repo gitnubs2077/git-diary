@@ -16,7 +16,9 @@
 :root {
     --sidebar-width: 350px;
 
-    /* Dark palette (default before the boot script sets [data-theme]) */
+    /* Pre-JS fallback (matches default/dark). The boot script sets [data-mode]
+       and [data-skin] before Blazor renders, so users only see this palette in
+       the split-second before the inline script runs. */
     --bg-primary: #1a1b2e;
     --bg-secondary: #232540;
     --bg-tertiary: #2a2d4a;
@@ -35,7 +37,9 @@
     --overlay-bg: rgba(0, 0, 0, 0.6);
 }
 
-[data-theme="dark"] {
+/* ===== Skin: Default (the app's original identity) ===== */
+
+[data-skin="default"][data-mode="dark"] {
     --bg-primary: #1a1b2e;
     --bg-secondary: #232540;
     --bg-tertiary: #2a2d4a;
@@ -54,7 +58,7 @@
     --overlay-bg: rgba(0, 0, 0, 0.6);
 }
 
-[data-theme="light"] {
+[data-skin="default"][data-mode="light"] {
     --bg-primary: #f7f7fb;
     --bg-secondary: #ffffff;
     --bg-tertiary: #eef0f6;
@@ -71,6 +75,253 @@
     --sidebar-bg: #f0f1f7;
     --shadow-modal: 0 16px 48px rgba(15, 20, 45, 0.15);
     --overlay-bg: rgba(15, 20, 45, 0.35);
+}
+
+/* ===== Skin: Fluent (Windows 11 / Fluent 2) ===== */
+
+[data-skin="fluent"][data-mode="light"] {
+    --bg-primary: #f3f3f3;
+    --bg-secondary: #fbfbfb;
+    --bg-tertiary: #eaeaea;
+    --text-primary: #1f1f1f;
+    --text-secondary: #5c5c5c;
+    --text-muted: #8a8a8a;
+    --accent: #0067c0;
+    --accent-hover: #005ba1;
+    --danger: #c42b1c;
+    --success: #107c10;
+    --warning: #b7791f;
+    --border: #e5e5e5;
+    --editor-bg: #ffffff;
+    --sidebar-bg: #f9f9f9;
+    --shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.14);
+    --overlay-bg: rgba(0, 0, 0, 0.30);
+}
+
+[data-skin="fluent"][data-mode="dark"] {
+    --bg-primary: #202020;
+    --bg-secondary: #2b2b2b;
+    --bg-tertiary: #383838;
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --text-muted: #8b8b8b;
+    --accent: #4cc2ff;
+    --accent-hover: #6dc7ff;
+    --danger: #ff99a4;
+    --success: #6ccb5f;
+    --warning: #fce100;
+    --border: #3d3d3d;
+    --editor-bg: #1a1a1a;
+    --sidebar-bg: #1c1c1c;
+    --shadow-modal: 0 12px 32px rgba(0, 0, 0, 0.55);
+    --overlay-bg: rgba(0, 0, 0, 0.55);
+}
+
+/* ===== Skin: Windows XP (Luna light, Royale-Noir-inspired dark) ===== */
+
+[data-skin="windows-xp"][data-mode="light"] {
+    --bg-primary: #ece9d8;
+    --bg-secondary: #f5f4e9;
+    --bg-tertiary: #dcd8c1;
+    --text-primary: #000000;
+    --text-secondary: #333333;
+    --text-muted: #6b6b6b;
+    --accent: #316AC5;
+    --accent-hover: #2a5eaf;
+    --danger: #b40000;
+    --success: #178317;
+    --warning: #d97706;
+    --border: #a0a0a0;
+    --editor-bg: #ffffff;
+    --sidebar-bg: #d6e0ee;
+    --shadow-modal: 0 4px 12px rgba(0, 0, 0, 0.30);
+    --overlay-bg: rgba(0, 0, 0, 0.35);
+}
+
+[data-skin="windows-xp"][data-mode="dark"] {
+    --bg-primary: #2a2a2a;
+    --bg-secondary: #363636;
+    --bg-tertiary: #414141;
+    --text-primary: #f0f0f0;
+    --text-secondary: #c0c0c0;
+    --text-muted: #7a7a7a;
+    --accent: #4a90e2;
+    --accent-hover: #6ba3ea;
+    --danger: #ff5c5c;
+    --success: #4bcf6e;
+    --warning: #ffb84d;
+    --border: #4a4a4a;
+    --editor-bg: #1e1e1e;
+    --sidebar-bg: #1c2a44;
+    --shadow-modal: 0 4px 16px rgba(0, 0, 0, 0.55);
+    --overlay-bg: rgba(0, 0, 0, 0.55);
+}
+
+/* XP-specific flair, split by mode so gradients don't clash with the palette. */
+[data-skin="windows-xp"] .btn-new,
+[data-skin="windows-xp"] .btn-commit,
+[data-skin="windows-xp"] .btn-primary {
+    border-radius: 4px;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+
+[data-skin="windows-xp"][data-mode="light"] .btn-new,
+[data-skin="windows-xp"][data-mode="light"] .btn-commit,
+[data-skin="windows-xp"][data-mode="light"] .btn-primary {
+    background: linear-gradient(to bottom, #5b8ed8 0%, #316AC5 50%, #274f9a 100%);
+    border: 1px solid #1c3d78;
+}
+
+[data-skin="windows-xp"][data-mode="light"] .btn-new:hover:not(:disabled),
+[data-skin="windows-xp"][data-mode="light"] .btn-commit:hover:not(:disabled),
+[data-skin="windows-xp"][data-mode="light"] .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(to bottom, #6ea0e6 0%, #3d7cd8 50%, #2f5cad 100%);
+}
+
+[data-skin="windows-xp"][data-mode="dark"] .btn-new,
+[data-skin="windows-xp"][data-mode="dark"] .btn-commit,
+[data-skin="windows-xp"][data-mode="dark"] .btn-primary {
+    background: linear-gradient(to bottom, #3a5a8c 0%, #24406e 50%, #16294a 100%);
+    border: 1px solid #0f1f3d;
+}
+
+[data-skin="windows-xp"][data-mode="dark"] .btn-new:hover:not(:disabled),
+[data-skin="windows-xp"][data-mode="dark"] .btn-commit:hover:not(:disabled),
+[data-skin="windows-xp"][data-mode="dark"] .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(to bottom, #4c72ae 0%, #305285 50%, #1e3560 100%);
+}
+
+[data-skin="windows-xp"][data-mode="light"] .app-sidebar {
+    background: linear-gradient(to bottom, #dfe8f3 0%, #cad9ec 100%);
+}
+
+[data-skin="windows-xp"][data-mode="dark"] .app-sidebar {
+    background: linear-gradient(to bottom, #1a2540 0%, #101830 100%);
+}
+
+/* ===== Skin: macOS (Big Sur+ light and dark) ===== */
+
+[data-skin="mac"][data-mode="light"] {
+    --bg-primary: #f5f5f7;
+    --bg-secondary: #fbfbfd;
+    --bg-tertiary: #ececee;
+    --text-primary: #1c1c1e;
+    --text-secondary: #48484a;
+    --text-muted: #8e8e93;
+    --accent: #007aff;
+    --accent-hover: #0060df;
+    --danger: #ff3b30;
+    --success: #34c759;
+    --warning: #ff9500;
+    --border: #d1d1d6;
+    --editor-bg: #ffffff;
+    --sidebar-bg: #ebebed;
+    --shadow-modal: 0 20px 40px rgba(0, 0, 0, 0.18);
+    --overlay-bg: rgba(0, 0, 0, 0.35);
+}
+
+[data-skin="mac"][data-mode="dark"] {
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #2c2c2e;
+    --bg-tertiary: #3a3a3c;
+    --text-primary: #f5f5f7;
+    --text-secondary: #ebebf5;
+    --text-muted: #8e8e93;
+    --accent: #0a84ff;
+    --accent-hover: #409cff;
+    --danger: #ff453a;
+    --success: #30d158;
+    --warning: #ff9f0a;
+    --border: #38383a;
+    --editor-bg: #1c1c1e;
+    --sidebar-bg: #252527;
+    --shadow-modal: 0 20px 40px rgba(0, 0, 0, 0.55);
+    --overlay-bg: rgba(0, 0, 0, 0.55);
+}
+
+/* ===== Skin: Solarized (Ethan Schoonover's canonical palette) =====
+   Uses the "base" grayscale rungs on either the light or dark half of the
+   16-color palette and picks accents from the shared eight-color band. */
+
+[data-skin="solarized"][data-mode="light"] {
+    --bg-primary: #fdf6e3;      /* base3  */
+    --bg-secondary: #f5efd7;    /* between base3 and base2 */
+    --bg-tertiary: #eee8d5;     /* base2  */
+    --text-primary: #073642;    /* base02 */
+    --text-secondary: #586e75;  /* base01 */
+    --text-muted: #93a1a1;      /* base1  */
+    --accent: #268bd2;          /* blue   */
+    --accent-hover: #1e78bd;
+    --danger: #dc322f;          /* red    */
+    --success: #859900;         /* green  */
+    --warning: #b58900;         /* yellow */
+    --border: #eee8d5;
+    --editor-bg: #fdf6e3;
+    --sidebar-bg: #eee8d5;
+    --shadow-modal: 0 12px 32px rgba(101, 123, 131, 0.25);
+    --overlay-bg: rgba(88, 110, 117, 0.35);
+}
+
+[data-skin="solarized"][data-mode="dark"] {
+    --bg-primary: #002b36;      /* base03 */
+    --bg-secondary: #073642;    /* base02 */
+    --bg-tertiary: #0c4855;
+    --text-primary: #93a1a1;    /* base1 — the canonical Solarized content colour */
+    --text-secondary: #839496;  /* base0  */
+    --text-muted: #586e75;      /* base01 */
+    --accent: #268bd2;          /* blue   */
+    --accent-hover: #4aa4e0;
+    --danger: #dc322f;
+    --success: #859900;
+    --warning: #b58900;
+    --border: #073642;
+    --editor-bg: #002b36;
+    --sidebar-bg: #01212b;
+    --shadow-modal: 0 12px 32px rgba(0, 0, 0, 0.55);
+    --overlay-bg: rgba(0, 0, 0, 0.55);
+}
+
+/* ===== Skin: Sepia (Kindle Paperwhite / Instapaper reading warmth) =====
+   Light is cream paper with brown ink; dark is a warm "night reading" mode
+   with muted amber text on near-black, matching how e-readers dim without
+   going cool blue. */
+
+[data-skin="sepia"][data-mode="light"] {
+    --bg-primary: #f4ecd8;
+    --bg-secondary: #fbf4de;
+    --bg-tertiary: #eae0c4;
+    --text-primary: #3a2f22;
+    --text-secondary: #5b4a37;
+    --text-muted: #8b7a63;
+    --accent: #a0522d;          /* Sienna — the "ink" accent */
+    --accent-hover: #8b4513;
+    --danger: #a63a2a;
+    --success: #6b8e23;
+    --warning: #b8860b;
+    --border: #d9cfb4;
+    --editor-bg: #fbf4de;
+    --sidebar-bg: #e9dfc2;
+    --shadow-modal: 0 12px 28px rgba(90, 70, 40, 0.20);
+    --overlay-bg: rgba(60, 45, 25, 0.35);
+}
+
+[data-skin="sepia"][data-mode="dark"] {
+    --bg-primary: #1a1613;
+    --bg-secondary: #221d18;
+    --bg-tertiary: #2b241d;
+    --text-primary: #e8d9b8;
+    --text-secondary: #b8a385;
+    --text-muted: #7d6d54;
+    --accent: #d4a574;
+    --accent-hover: #e3b98a;
+    --danger: #d97b6a;
+    --success: #a3c15b;
+    --warning: #e0b657;
+    --border: #362e26;
+    --editor-bg: #17130f;
+    --sidebar-bg: #14100c;
+    --shadow-modal: 0 12px 32px rgba(0, 0, 0, 0.60);
+    --overlay-bg: rgba(0, 0, 0, 0.55);
 }
 
 * {
@@ -217,6 +468,87 @@ html, body {
 .btn-icon:hover {
     color: var(--text-primary);
     background: var(--bg-tertiary);
+}
+
+/* ===== Theme picker popover ===== */
+.theme-picker {
+    position: relative;
+    display: inline-flex;
+}
+
+/* Transparent full-viewport catcher: any click outside the menu lands here
+   and closes it. Sits above every regular UI element but under the menu. */
+.theme-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    background: transparent;
+    z-index: 90;
+}
+
+.theme-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 100;
+    min-width: 200px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-modal);
+}
+
+.theme-menu-section {
+    display: flex;
+    flex-direction: column;
+    padding: 2px 0;
+}
+
+.theme-menu-heading {
+    padding: 6px 10px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.theme-menu-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 6px;
+}
+
+.theme-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.theme-menu-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.theme-menu-item.selected {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.theme-menu-icon {
+    width: 18px;
+    text-align: center;
+    flex-shrink: 0;
 }
 
 .sidebar-lang {

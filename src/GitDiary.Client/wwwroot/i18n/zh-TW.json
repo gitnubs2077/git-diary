@@ -6,11 +6,21 @@
   "sidebar.empty": "尚無日記。",
   "sidebar.language": "語言",
   "sidebar.theme": "主題（目前：{0}）",
+  "sidebar.theme.pickerLabel": "選擇主題",
   "sidebar.loading": "載入中…",
 
+  "theme.modeHeading": "亮/暗",
   "theme.system": "跟隨系統",
   "theme.light": "淺色",
   "theme.dark": "深色",
+
+  "skin.heading": "外觀",
+  "skin.default": "預設",
+  "skin.fluent": "Fluent 風",
+  "skin.windowsXp": "Windows XP",
+  "skin.mac": "macOS",
+  "skin.solarized": "Solarized",
+  "skin.sepia": "羊皮紙",
 
   "editor.save": "儲存",
   "editor.commit": "提交",

@@ -41,20 +41,57 @@
                 : null;
             const mql = mqlRaw || { matches: false, addEventListener: null, addListener: null };
 
-            function resolve(stored) {
+            // Two orthogonal knobs:
+            //   * mode = light | dark  (brightness — `system` collapses to one of these)
+            //   * skin = default | fluent | windows-xp | mac  (design language)
+            // Kept in separate localStorage keys so each can be changed independently.
+            const VALID_SKINS = ['default', 'fluent', 'windows-xp', 'mac', 'solarized', 'sepia'];
+
+            function resolveMode(stored) {
                 if (stored === 'light' || stored === 'dark') return stored;
+                // `system` and anything else fall through to the OS preference.
                 return mql.matches ? 'dark' : 'light';
             }
+            function resolveSkin(stored) {
+                return VALID_SKINS.indexOf(stored) !== -1 ? stored : 'default';
+            }
 
-            let stored = null;
-            try { stored = localStorage.getItem('gitdiary_theme'); } catch (_) { /* ignore */ }
-            html.dataset.theme = resolve(stored);
+            // Legacy migration (v1 → v2): a single `gitdiary_theme` key used to encode
+            // one of light/dark/system/fluent/windows-xp/mac. Split it here so the
+            // pre-Blazor paint is already correct; ThemeService performs the same
+            // migration server-side and clears the legacy key.
+            function splitLegacy(v) {
+                if (v === 'light' || v === 'dark' || v === 'system') return { mode: v, skin: 'default' };
+                if (v === 'fluent' || v === 'windows-xp' || v === 'mac') return { mode: 'light', skin: v };
+                return null;
+            }
+
+            let storedMode = null, storedSkin = null;
+            try {
+                storedMode = localStorage.getItem('gitdiary_mode');
+                storedSkin = localStorage.getItem('gitdiary_skin');
+                if (storedMode === null && storedSkin === null) {
+                    const legacySplit = splitLegacy(localStorage.getItem('gitdiary_theme'));
+                    if (legacySplit) {
+                        storedMode = legacySplit.mode;
+                        storedSkin = legacySplit.skin;
+                    }
+                }
+            } catch (_) { /* ignore */ }
+
+            html.dataset.mode = resolveMode(storedMode);
+            html.dataset.skin = resolveSkin(storedSkin);
 
             window.gitdiaryTheme = {
                 getSystemPrefersDark: function () { return mql.matches; },
-                applyTheme: function (resolved) {
+                applyMode: function (resolved) {
                     if (resolved === 'light' || resolved === 'dark') {
-                        html.dataset.theme = resolved;
+                        html.dataset.mode = resolved;
+                    }
+                },
+                applySkin: function (skin) {
+                    if (VALID_SKINS.indexOf(skin) !== -1) {
+                        html.dataset.skin = skin;
                     }
                 },
                 _watchHandler: null,

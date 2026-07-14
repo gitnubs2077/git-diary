@@ -6,11 +6,21 @@
   "sidebar.empty": "まだ日記がありません。",
   "sidebar.language": "言語",
   "sidebar.theme": "テーマ（現在：{0}）",
+  "sidebar.theme.pickerLabel": "テーマを選択",
   "sidebar.loading": "読み込み中…",
 
+  "theme.modeHeading": "モード",
   "theme.system": "システムに従う",
   "theme.light": "ライト",
   "theme.dark": "ダーク",
+
+  "skin.heading": "スキン",
+  "skin.default": "デフォルト",
+  "skin.fluent": "Fluent",
+  "skin.windowsXp": "Windows XP",
+  "skin.mac": "macOS",
+  "skin.solarized": "Solarized",
+  "skin.sepia": "セピア",
 
   "editor.save": "保存",
   "editor.commit": "コミット",

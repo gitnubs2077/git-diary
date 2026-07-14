@@ -23,9 +23,55 @@
                     <option value="@lang.Code()">@lang.DisplayName()</option>
                 }
             </select>
-            <button class="btn-icon" @onclick="CycleTheme" title="@ThemeTooltip">
-                @ThemeSvc.CurrentTheme.DisplayIcon()
-            </button>
+            <div class="theme-picker">
+                <button class="btn-icon"
+                        @onclick="ToggleThemeMenu"
+                        title="@ThemeTooltip"
+                        aria-haspopup="menu"
+                        aria-expanded="@_themeMenuOpen.ToString().ToLowerInvariant()">
+                    @ThemeSvc.CurrentTheme.DisplayIcon()
+                </button>
+                @if (_themeMenuOpen)
+                {
+                    @* Transparent full-viewport backdrop: catches any click that
+                       lands outside the menu and closes it. Sits below the menu
+                       (z-index) but above the rest of the app. *@
+                    <div class="theme-menu-backdrop" @onclick="CloseThemeMenu"></div>
+                    <div class="theme-menu" role="menu">
+                        <div class="theme-menu-section" role="group" aria-label="@L["skin.heading"]">
+                            <div class="theme-menu-heading">@L["skin.heading"]</div>
+                            @foreach (var s in SkinExtensions.All)
+                            {
+                                var isCurrent = s == ThemeSvc.CurrentSkin;
+                                <button type="button"
+                                        class="theme-menu-item @(isCurrent ? "selected" : "")"
+                                        role="menuitemradio"
+                                        aria-checked="@isCurrent.ToString().ToLowerInvariant()"
+                                        @onclick="() => PickSkin(s)">
+                                    <span class="theme-menu-icon" aria-hidden="true">@s.DisplayIcon()</span>
+                                    <span class="theme-menu-label">@L[s.LabelKey()]</span>
+                                </button>
+                            }
+                        </div>
+                        <div class="theme-menu-divider" role="separator"></div>
+                        <div class="theme-menu-section" role="group" aria-label="@L["theme.modeHeading"]">
+                            <div class="theme-menu-heading">@L["theme.modeHeading"]</div>
+                            @foreach (var t in ThemeExtensions.All)
+                            {
+                                var isCurrent = t == ThemeSvc.CurrentTheme;
+                                <button type="button"
+                                        class="theme-menu-item @(isCurrent ? "selected" : "")"
+                                        role="menuitemradio"
+                                        aria-checked="@isCurrent.ToString().ToLowerInvariant()"
+                                        @onclick="() => PickMode(t)">
+                                    <span class="theme-menu-icon" aria-hidden="true">@t.DisplayIcon()</span>
+                                    <span class="theme-menu-label">@L[t.LabelKey()]</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
             <button class="btn-icon" @onclick="OpenSettings" title="@L["sidebar.settings"]">⚙️</button>
             <button class="btn-new" @onclick="CreateTodayEntry">@L["sidebar.newToday"]</button>
         </div>
@@ -138,6 +184,10 @@
     // Key on (year, month) — using just the month number would collide across years
     // (e.g. expanding July 2025 would also expand July 2024).
     private HashSet<(int Year, int Month)> ExpandedMonths { get; set; } = new();
+
+    // Theme picker popover open state. Kept local — it's throwaway UI state and
+    // doesn't need to survive re-mount.
+    private bool _themeMenuOpen;
 
     // Grouped-entries cache. The tree computation isn't expensive per-call, but
     // it runs from GetGroupedEntries() which is invoked from the render body —
@@ -266,29 +316,37 @@
         await OnSettingsClicked.InvokeAsync();
     }
 
-    // System → Light → Dark → System
-    private async Task CycleTheme()
+    // System → Light → Dark → Fluent → Windows XP → Mac. Kept as a fallback for
+    // keyboard-only users; the picker below is the primary UI.
+    private void ToggleThemeMenu() => _themeMenuOpen = !_themeMenuOpen;
+
+    private void CloseThemeMenu() => _themeMenuOpen = false;
+
+    private async Task PickMode(Theme mode)
     {
-        var next = ThemeSvc.CurrentTheme switch
+        _themeMenuOpen = false;
+        if (ThemeSvc.CurrentTheme != mode)
         {
-            Theme.System => Theme.Light,
-            Theme.Light => Theme.Dark,
-            _ => Theme.System
-        };
-        await ThemeSvc.SetThemeAsync(next);
+            await ThemeSvc.SetThemeAsync(mode);
+        }
+    }
+
+    private async Task PickSkin(Skin skin)
+    {
+        _themeMenuOpen = false;
+        if (ThemeSvc.CurrentSkin != skin)
+        {
+            await ThemeSvc.SetSkinAsync(skin);
+        }
     }
 
     private string ThemeTooltip
     {
         get
         {
-            var label = ThemeSvc.CurrentTheme switch
-            {
-                Theme.Light => L["theme.light"],
-                Theme.Dark => L["theme.dark"],
-                _ => L["theme.system"]
-            };
-            return L.Format("sidebar.theme", label);
+            var skinLabel = L[ThemeSvc.CurrentSkin.LabelKey()];
+            var modeLabel = L[ThemeSvc.CurrentTheme.LabelKey()];
+            return L.Format("sidebar.theme", skinLabel + " · " + modeLabel);
         }
     }
 

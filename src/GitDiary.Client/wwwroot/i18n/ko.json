@@ -6,11 +6,21 @@
   "sidebar.empty": "아직 일기가 없습니다.",
   "sidebar.language": "언어",
   "sidebar.theme": "테마 (현재: {0})",
+  "sidebar.theme.pickerLabel": "테마 선택",
   "sidebar.loading": "불러오는 중…",
 
+  "theme.modeHeading": "모드",
   "theme.system": "시스템 설정",
   "theme.light": "라이트",
   "theme.dark": "다크",
+
+  "skin.heading": "스킨",
+  "skin.default": "기본",
+  "skin.fluent": "Fluent",
+  "skin.windowsXp": "Windows XP",
+  "skin.mac": "macOS",
+  "skin.solarized": "Solarized",
+  "skin.sepia": "세피아",
 
   "editor.save": "저장",
   "editor.commit": "커밋",
