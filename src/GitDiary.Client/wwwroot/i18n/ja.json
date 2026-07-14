@@ -7,12 +7,10 @@
   "sidebar.theme": "テーマ（現在：{0}）",
   "sidebar.theme.pickerLabel": "テーマを選択",
   "sidebar.loading": "読み込み中…",
-
   "theme.modeHeading": "モード",
   "theme.system": "システムに従う",
   "theme.light": "ライト",
   "theme.dark": "ダーク",
-
   "skin.heading": "スキン",
   "skin.default": "デフォルト",
   "skin.fluent": "Fluent",
@@ -20,7 +18,6 @@
   "skin.mac": "macOS",
   "skin.solarized": "Solarized",
   "skin.sepia": "セピア",
-
   "editor.save": "保存",
   "editor.commit": "コミット",
   "editor.committing": "コミット中…",
@@ -43,7 +40,6 @@
   "editor.emptyCta": "今日の日記を書く",
   "editor.viewOnGitHub": "GitHub",
   "editor.viewOnGitHubTooltip": "この日記を GitHub で開く",
-
   "setup.subtitleWelcome": "ようこそ！日記をセットアップしましょう。",
   "setup.subtitleUpdate": "GitHub リポジトリの設定を更新します。",
   "setup.buttonStart": "書き始める",
@@ -60,6 +56,10 @@
   "setup.createToken": "トークンを作成 →",
   "setup.viewRepo": "GitHub でリポジトリを開く →",
   "setup.cancel": "キャンセル",
+  "setup.disconnect": "この日記を切断",
+  "setup.disconnectHint": "トークン、リポジトリ設定、ローカルに保存された下書きをこのブラウザから削除します。",
+  "setup.disconnectConfirm": "切断してローカルデータを消去しますか？トークンとリポジトリ設定がこのブラウザから削除され、GitHub に未コミットの下書きは破棄されます。コミット済みの日記はリポジトリに安全に残ります。",
+  "setup.disconnectYes": "切断する",
   "setup.footer": "トークンはブラウザ内にのみ保存され、アップロードされません。",
   "setup.errorCannotConnect": "リポジトリに接続できません：{0}",
   "setup.errorNoWrite": "トークンに書き込み権限がありません。Fine-Grained PAT に「Contents: 読み取りと書き込み」権限があるかご確認ください。",
@@ -68,10 +68,8 @@
   "setup.errorInvalidRepo": "リポジトリ名の形式が無効です（1-100 文字の英数字、ドット、アンダースコア、ハイフン）。",
   "setup.errorInvalidToken": "トークンが GitHub PAT の形式ではありません。「github_pat_…」または「ghp_…」で始まる必要があります。",
   "setup.language": "言語",
-
   "search.placeholder": "日記を検索…",
   "search.found": "{0} 件の結果",
-
   "status.committed": "コミット済み",
   "status.committing": "コミット中…",
   "status.pending": "下書きをローカルに保存済み — 未コミット",
@@ -81,6 +79,5 @@
   "status.entries": "{0} 件",
   "status.words": "{0} 語",
   "status.offline": "オフライン中 — 変更はローカルに保留されます",
-
   "home.resizerTooltip": "ドラッグで幅を調整 · ダブルクリックでリセット"
 }

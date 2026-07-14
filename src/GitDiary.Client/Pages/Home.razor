@@ -23,7 +23,8 @@ else if (ShowSettings)
             <SetupWizard
                 ExistingConfig="SettingsStore.Config"
                 ConfigSaved="OnSettingsSaved"
-                CancelClicked="CloseSettings" />
+                CancelClicked="CloseSettings"
+                DisconnectRequested="OnDisconnect" />
         </div>
     </div>
 }
@@ -63,6 +64,11 @@ else
 
     [Inject]
     private Services.OnlineSyncCoordinator OnlineSync { get; set; } = default!;
+
+    // Injected solely so a disconnect can erase locally-cached drafts, which hold
+    // the diary text itself. Everything else goes through DiaryStore.
+    [Inject]
+    private Services.IndexedDbRepository Drafts { get; set; } = default!;
 
     [Inject]
     private LocalizationService L { get; set; } = default!;
@@ -328,6 +334,43 @@ else
         await DiaryStore.RefreshEntriesAsync();
         await OnEntrySelected(today);
         await OnlineSync.EnsureStartedAsync();
+    }
+
+    // Disconnect: erase every trace of the account from this browser.
+    //
+    // Until this existed there was no way to remove a PAT once entered —
+    // SettingsStore.ClearConfig() had zero callers, and even it only nulled the
+    // in-memory copy, so a reload resurrected the token straight out of
+    // localStorage. On a shared or work machine the credential was, in practice,
+    // permanent. Reconfiguring could overwrite it; nothing could erase it.
+    //
+    // Order matters. Wipe persistent storage FIRST: if an exception escapes
+    // midway, a still-configured app with no stored token is a recoverable state,
+    // whereas a logged-out app with the token still on disk is exactly the failure
+    // this method exists to prevent.
+    private async Task OnDisconnect()
+    {
+        try
+        {
+            foreach (var key in new[] { "gitdiary_token", "gitdiary_owner", "gitdiary_repo", "gitdiary_branch" })
+            {
+                await JsRuntime.InvokeVoidAsync("localStorage.removeItem", key);
+            }
+
+            // Drafts hold the diary text itself, not just the credential.
+            await Drafts.ClearAllAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] OnDisconnect: failed to clear local storage: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        GitHubApi.ClearConfig();
+        SettingsStore.ClearConfig();
+        DiaryStore.Reset();
+
+        ShowSettings = false;
+        StateHasChanged();
     }
 
     private async Task PersistConfigAsync()

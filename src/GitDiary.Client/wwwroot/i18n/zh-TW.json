@@ -7,12 +7,10 @@
   "sidebar.theme": "主題（目前：{0}）",
   "sidebar.theme.pickerLabel": "選擇主題",
   "sidebar.loading": "載入中…",
-
   "theme.modeHeading": "亮/暗",
   "theme.system": "跟隨系統",
   "theme.light": "淺色",
   "theme.dark": "深色",
-
   "skin.heading": "外觀",
   "skin.default": "預設",
   "skin.fluent": "Fluent 風",
@@ -20,7 +18,6 @@
   "skin.mac": "macOS",
   "skin.solarized": "Solarized",
   "skin.sepia": "羊皮紙",
-
   "editor.save": "儲存",
   "editor.commit": "提交",
   "editor.committing": "正在提交…",
@@ -43,7 +40,6 @@
   "editor.emptyCta": "寫下今天的日記",
   "editor.viewOnGitHub": "GitHub",
   "editor.viewOnGitHubTooltip": "在 GitHub 開啟這篇日記",
-
   "setup.subtitleWelcome": "歡迎！讓我們來設定你的日記。",
   "setup.subtitleUpdate": "更新你的 GitHub 儲存庫設定。",
   "setup.buttonStart": "開始撰寫",
@@ -60,6 +56,10 @@
   "setup.createToken": "建立權杖 →",
   "setup.viewRepo": "在 GitHub 開啟儲存庫 →",
   "setup.cancel": "取消",
+  "setup.disconnect": "中斷此日記",
+  "setup.disconnectHint": "從此瀏覽器中清除你的權杖、儲存庫設定以及本機快取的草稿。",
+  "setup.disconnectConfirm": "確定要中斷並清除本機資料嗎？你的權杖與儲存庫設定將從此瀏覽器移除，尚未提交到 GitHub 的草稿會被捨棄。已提交的日記仍安全保存在你的儲存庫中。",
+  "setup.disconnectYes": "確定中斷",
   "setup.footer": "權杖僅儲存在你的瀏覽器中，絕不會上傳。",
   "setup.errorCannotConnect": "無法連接到儲存庫：{0}",
   "setup.errorNoWrite": "權杖沒有寫入權限。請確保你的 Fine-Grained PAT 具有「Contents: 讀取與寫入」權限。",
@@ -68,10 +68,8 @@
   "setup.errorInvalidRepo": "儲存庫名稱格式無效（1-100 位英數字、點、底線或連字號）。",
   "setup.errorInvalidToken": "權杖格式不像 GitHub PAT。應以「github_pat_…」或「ghp_…」開頭。",
   "setup.language": "語言",
-
   "search.placeholder": "搜尋日記…",
   "search.found": "找到 {0} 筆結果",
-
   "status.committed": "已提交",
   "status.committing": "正在提交…",
   "status.pending": "草稿已本機儲存 — 未提交",
@@ -81,6 +79,5 @@
   "status.entries": "共 {0} 篇",
   "status.words": "{0} 字",
   "status.offline": "離線中 — 變更已在本機排隊",
-
   "home.resizerTooltip": "拖曳調整寬度 · 雙擊還原預設"
 }

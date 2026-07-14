@@ -89,6 +89,28 @@
                 <div class="form-cancel">
                     <button class="btn-cancel-full" @onclick="Cancel">@L["setup.cancel"]</button>
                 </div>
+
+                <div class="form-disconnect">
+                    @if (!_confirmingDisconnect)
+                    {
+                        <button class="btn-disconnect" @onclick="() => _confirmingDisconnect = true">
+                            @L["setup.disconnect"]
+                        </button>
+                        <small class="form-hint">@L["setup.disconnectHint"]</small>
+                    }
+                    else
+                    {
+                        <p class="disconnect-warning">@L["setup.disconnectConfirm"]</p>
+                        <div class="disconnect-actions">
+                            <button class="btn-disconnect-confirm" @onclick="Disconnect">
+                                @L["setup.disconnectYes"]
+                            </button>
+                            <button class="btn-cancel-full" @onclick="() => _confirmingDisconnect = false">
+                                @L["setup.cancel"]
+                            </button>
+                        </div>
+                    }
+                </div>
             }
         </div>
 
@@ -113,6 +135,12 @@
 
     [Parameter]
     public EventCallback CancelClicked { get; set; }
+
+    // Raised when the user confirms "disconnect". The wizard deliberately does NOT
+    // clear anything itself: the token lives in localStorage, which only Home
+    // touches, so Home owns erasing it (see Home.ClearStoredConfigAsync).
+    [Parameter]
+    public EventCallback DisconnectRequested { get; set; }
 
     [Parameter]
     public RepositoryConfig? ExistingConfig { get; set; }
@@ -149,6 +177,12 @@
     // round-trips (the `disabled` attribute only becomes effective after the next
     // render, which is too late during the two-second API round-trip window).
     private bool _saveInFlight;
+    // Disconnect is destructive and irreversible from inside the app (the PAT is
+    // write-only in the UI — it cannot be read back out to re-enter). A two-step
+    // confirm keeps a misclick in the settings overlay from wiping the connection.
+    // Deliberately not a JS confirm(): that would need an IJSRuntime injection here
+    // purely for a modal, and this renders inline with the rest of the wizard.
+    private bool _confirmingDisconnect;
 
     private bool ShowCancel => ExistingConfig is not null;
 
@@ -259,6 +293,12 @@
     private async Task Cancel()
     {
         await CancelClicked.InvokeAsync();
+    }
+
+    private async Task Disconnect()
+    {
+        _confirmingDisconnect = false;
+        await DisconnectRequested.InvokeAsync();
     }
 
     private async Task SaveConfigAsync()

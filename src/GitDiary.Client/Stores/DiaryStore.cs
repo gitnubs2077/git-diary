@@ -266,6 +266,25 @@ public sealed class DiaryStore : StoreBase
         return Result<bool>.Success(true);
     }
 
+    /// <summary>
+    /// Drops all loaded diary state back to first-run defaults. Called on disconnect
+    /// so the previous account's entry list and open entry do not survive in memory
+    /// and flash on screen behind the setup wizard.
+    /// <para>
+    /// Assigns through the properties rather than the backing fields so each raises
+    /// StateChanged and every subscribed component re-renders.
+    /// </para>
+    /// </summary>
+    public void Reset()
+    {
+        CurrentEntry = null;
+        Entries = new List<DiaryEntryInfo>();
+        CurrentContent = "";
+        IsDirty = false;
+        IsLoading = false;
+        SyncState = SyncState.Synced;
+    }
+
     public async Task RefreshEntriesAsync()
     {
         var result = await _diaryRepo.GetAllAsync();

@@ -29,6 +29,14 @@ jobs:
       - name: Restore
         run: dotnet restore src/GitDiary.Client/GitDiary.Client.csproj
 
+      # Runs BEFORE publish so a failure blocks the deploy rather than reporting it
+      # after the fact. SafeMarkdownTests is the load-bearing one: the Markdown
+      # preview's HTML is injected via innerHTML, and the PAT is in localStorage, so
+      # an injection there reads the user's credential. A green deploy with those
+      # tests red would ship exactly the vulnerability they exist to prevent.
+      - name: Test
+        run: dotnet test tests/GitDiary.Tests/GitDiary.Tests.csproj -c Release
+
       - name: Publish
         run: dotnet publish src/GitDiary.Client/GitDiary.Client.csproj --no-restore -c Release -o publish
 
@@ -58,6 +66,54 @@ jobs:
             grep -n '<base ' publish/wwwroot/index.html || true
             exit 1
           fi
+
+      # index.html's CSP deliberately has no script-src 'unsafe-inline' (an XSS in
+      # the Markdown preview would otherwise be a straight path to the PAT in
+      # localStorage). But `dotnet publish` rewrites the empty
+      # <script type="importmap"></script> placeholder into a populated inline
+      # import map whose body embeds fingerprinted filenames — so its hash changes
+      # on every build and cannot be hardcoded in the source HTML. Without a
+      # matching hash the browser blocks the import map, blazor.webassembly.js then
+      # requests the unfingerprinted `_framework/dotnet.js` (404), and the app hangs
+      # on the loading spinner forever with nothing rendered in the page. Recompute
+      # and pin it here, against the published file, after the base-href rewrite.
+      - name: Pin import-map CSP hash
+        run: python3 .github/scripts/pin_importmap_csp.py publish/wwwroot/index.html
+
+      # Both greps are scoped to the CSP <meta> line on purpose. index.html also
+      # contains a prose comment *about* the CSP that mentions both "script-src" and
+      # "'unsafe-inline'", so an unscoped grep over the whole file matches the
+      # documentation and fails (or passes) for entirely the wrong reason.
+      - name: Verify CSP hardening survived the build
+        run: |
+          csp="$(grep 'http-equiv="Content-Security-Policy"' publish/wwwroot/index.html || true)"
+          if [ -z "$csp" ]; then
+            echo "::error::No CSP meta tag in the published index.html."
+            exit 1
+          fi
+          script_src="$(printf '%s' "$csp" | grep -o "script-src[^;]*" || true)"
+          echo "script-src: $script_src"
+          case "$script_src" in
+            *"'sha256-"*) ;;
+            *) echo "::error::script-src carries no import-map hash — the app would not boot."; exit 1 ;;
+          esac
+          case "$script_src" in
+            *"'unsafe-inline'"*)
+              echo "::error::script-src regained 'unsafe-inline'. An injected inline script would execute, and the GitHub PAT in localStorage is one line of JS away. Refusing to deploy."
+              exit 1 ;;
+          esac
+          img_src="$(printf '%s' "$csp" | grep -o "img-src[^;]*" || true)"
+          echo "img-src: $img_src"
+          # A bare `https:` source re-opens the image-beacon exfil channel that
+          # connect-src cannot see. Compare token by token: `https:` on its own is
+          # the wildcard and must fail, while `https://host` is an explicit host and
+          # is fine. Substring matching cannot tell those two apart.
+          for src in $img_src; do
+            if [ "$src" = "https:" ] || [ "$src" = "http:" ] || [ "$src" = "*" ]; then
+              echo "::error::img-src contains the wildcard '$src' — a compromised renderer could beacon the PAT to any host (img-src is not covered by connect-src). Refusing to deploy."
+              exit 1
+            fi
+          done
 
       # Blazor ships filenames starting with '_' (e.g. _framework). GitHub
       # Pages runs Jekyll by default, which strips them. .nojekyll disables it.

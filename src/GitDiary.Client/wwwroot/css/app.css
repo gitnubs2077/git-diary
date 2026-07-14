@@ -1471,6 +1471,73 @@ html, body {
     color: var(--text-primary);
 }
 
+/* Disconnect: the only way to remove a PAT (and any locally cached drafts) from
+   this browser. Deliberately set apart below a divider and styled as a quiet,
+   destructive action — it is not a primary flow, but on a shared machine it is
+   the one control that matters. */
+.form-disconnect {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.btn-disconnect {
+    width: 100%;
+    padding: 10px 24px;
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-disconnect:hover {
+    background: var(--danger);
+    color: white;
+}
+
+.disconnect-warning {
+    padding: 10px 14px;
+    background: rgba(255, 71, 87, 0.1);
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    color: var(--danger);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.disconnect-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.disconnect-actions .btn-cancel-full,
+.disconnect-actions .btn-disconnect-confirm {
+    margin-top: 0;
+    flex: 1;
+}
+
+.btn-disconnect-confirm {
+    padding: 12px 24px;
+    background: var(--danger);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.btn-disconnect-confirm:hover {
+    opacity: 0.85;
+}
+
 .btn-confirm-delete {
     padding: 8px 20px;
     border: none;

@@ -178,6 +178,40 @@ public sealed class IndexedDbRepository : IDisposable
         }
     }
 
+    /// <summary>
+    /// Erases every draft, in memory and in localStorage. Used when disconnecting an
+    /// account: drafts hold the diary text itself, so leaving them behind would make
+    /// "disconnect" a lie on a shared machine — the next person to open the app would
+    /// see the previous user's writing even with the token gone.
+    /// <para>
+    /// This DISCARDS unsynced work by design. The caller is responsible for warning
+    /// the user first (see setup.disconnectConfirm).
+    /// </para>
+    /// </summary>
+    public async Task ClearAllAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            _drafts.Clear();
+            // Mark as loaded so a later read doesn't repopulate the cache from the
+            // very localStorage blob we are about to delete.
+            _loaded = true;
+            try
+            {
+                await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+            }
+            catch
+            {
+                // localStorage unavailable; the in-memory drafts are cleared regardless.
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

@@ -7,12 +7,10 @@
   "sidebar.theme": "테마 (현재: {0})",
   "sidebar.theme.pickerLabel": "테마 선택",
   "sidebar.loading": "불러오는 중…",
-
   "theme.modeHeading": "모드",
   "theme.system": "시스템 설정",
   "theme.light": "라이트",
   "theme.dark": "다크",
-
   "skin.heading": "스킨",
   "skin.default": "기본",
   "skin.fluent": "Fluent",
@@ -20,7 +18,6 @@
   "skin.mac": "macOS",
   "skin.solarized": "Solarized",
   "skin.sepia": "세피아",
-
   "editor.save": "저장",
   "editor.commit": "커밋",
   "editor.committing": "커밋 중…",
@@ -43,7 +40,6 @@
   "editor.emptyCta": "오늘의 일기 쓰기",
   "editor.viewOnGitHub": "GitHub",
   "editor.viewOnGitHubTooltip": "이 일기를 GitHub에서 열기",
-
   "setup.subtitleWelcome": "환영합니다! 일기를 설정해 봅시다.",
   "setup.subtitleUpdate": "GitHub 저장소 설정을 업데이트합니다.",
   "setup.buttonStart": "작성 시작",
@@ -60,6 +56,10 @@
   "setup.createToken": "토큰 만들기 →",
   "setup.viewRepo": "GitHub에서 저장소 열기 →",
   "setup.cancel": "취소",
+  "setup.disconnect": "이 일기 연결 해제",
+  "setup.disconnectHint": "이 브라우저에서 토큰, 저장소 설정 및 로컬에 캐시된 초안을 삭제합니다.",
+  "setup.disconnectConfirm": "연결을 해제하고 로컬 데이터를 지울까요? 토큰과 저장소 설정이 이 브라우저에서 삭제되며, GitHub에 아직 커밋되지 않은 초안은 폐기됩니다. 이미 커밋된 일기는 저장소에 안전하게 남습니다.",
+  "setup.disconnectYes": "연결 해제",
   "setup.footer": "토큰은 브라우저에만 저장되며 절대 업로드되지 않습니다.",
   "setup.errorCannotConnect": "저장소에 연결할 수 없습니다: {0}",
   "setup.errorNoWrite": "토큰에 쓰기 권한이 없습니다. Fine-Grained PAT에 'Contents: 읽기 및 쓰기' 권한이 있는지 확인하세요.",
@@ -68,10 +68,8 @@
   "setup.errorInvalidRepo": "저장소 이름 형식이 잘못되었습니다 (영숫자, 점, 밑줄, 하이픈 1-100자).",
   "setup.errorInvalidToken": "토큰이 GitHub PAT 형식이 아닙니다. 'github_pat_…' 또는 'ghp_…'로 시작해야 합니다.",
   "setup.language": "언어",
-
   "search.placeholder": "일기 검색…",
   "search.found": "{0}개의 결과",
-
   "status.committed": "커밋됨",
   "status.committing": "커밋 중…",
   "status.pending": "초안이 로컬에 저장됨 — 미커밋",
@@ -81,6 +79,5 @@
   "status.entries": "총 {0}개",
   "status.words": "{0} 단어",
   "status.offline": "오프라인 — 변경 사항이 로컬에 대기 중",
-
   "home.resizerTooltip": "드래그하여 너비 조정 · 더블 클릭으로 초기화"
 }

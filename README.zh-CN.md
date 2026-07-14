@@ -147,12 +147,29 @@ dotnet run              # http://localhost:5016
 dotnet watch run
 ```
 
+运行测试（其中 Markdown 净化器的测试是安全关键项）：
+
+```bash
+dotnet test tests/GitDiary.Tests
+```
+
 发布静态站点（可部署到 GitHub Pages / Netlify / Cloudflare Pages / 任意静态托管）：
 
 ```bash
-dotnet publish -c Release -o publish
+dotnet publish src/GitDiary.Client -c Release -o publish
+
+# 必须执行。否则应用会永远卡在加载动画上。
+python3 .github/scripts/pin_importmap_csp.py publish/wwwroot/index.html
+
 # 静态产物位于：publish/wwwroot/
 ```
+
+> ⚠️ **第二条命令不能省略。** 应用的 CSP 刻意不包含 `script-src 'unsafe-inline'`，
+> 这样即使 Markdown 预览出现 XSS，注入的脚本也无法执行、无法读走 `localStorage` 里的
+> PAT。但 `dotnet publish` 会生成一段内联的 *import map*，其内容每次构建都会变化，
+> 而浏览器在 CSP 未携带其 hash 时会直接拦截它。这个脚本负责计算并写入该 hash。
+> 跳过它，Blazor 就永远起不来 —— 页面只会一直转圈，且不显示任何报错。
+> CI（[`deploy.yml`](.github/workflows/deploy.yml)）会自动执行；手动发布则不会。
 
 ### 5. 日常使用
 

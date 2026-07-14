@@ -147,12 +147,31 @@ dotnet run              # http://localhost:5016
 dotnet watch run
 ```
 
+Run the tests (the Markdown sanitizer suite is the security-critical one):
+
+```bash
+dotnet test tests/GitDiary.Tests
+```
+
 Publish a static build (deployable to GitHub Pages / Netlify / Cloudflare Pages / any static host):
 
 ```bash
-dotnet publish -c Release -o publish
+dotnet publish src/GitDiary.Client -c Release -o publish
+
+# REQUIRED. Without this the app hangs forever on the loading spinner.
+python3 .github/scripts/pin_importmap_csp.py publish/wwwroot/index.html
+
 # static output lives in: publish/wwwroot/
 ```
+
+> ⚠️ **Do not skip the second command.** The app's CSP deliberately omits
+> `script-src 'unsafe-inline'`, so that a hypothetical XSS in the Markdown preview
+> cannot execute and read your PAT out of `localStorage`. But `dotnet publish`
+> generates an inline *import map* whose contents change on every build, and the
+> browser blocks it unless the CSP carries its hash. The script computes that hash
+> and pins it. Skip it and Blazor never boots — the page just spins, with no error
+> shown. CI ([`deploy.yml`](.github/workflows/deploy.yml)) runs it for you; a manual
+> publish does not.
 
 ### 5. Daily workflow
 

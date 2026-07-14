@@ -28,8 +28,21 @@ public sealed class GitHubApiClient
     private static readonly Regex BearerPattern = new(
         @"Bearer\s+[A-Za-z0-9_\-\.]+",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    // `github_pat_` must be listed here and originally wasn't: fine-grained PATs are
+    // the format this app is built around (SetupWizard validates them as the primary
+    // case and links users straight at the fine-grained token page), yet the previous
+    // pattern — `gh[pousr]_` — cannot match them, because the third character of
+    // `github_pat_` is `i` and `i` is not in that character class. The one token
+    // format essentially every user actually pastes in was the one this redactor
+    // silently skipped.
+    //
+    // Legacy 40-hex tokens are deliberately NOT matched. They are extinct on
+    // github.com, and `[a-f0-9]{40}` also matches every commit/blob/tree SHA — which
+    // GitHub's response bodies are full of. Adding it would redact all of them out of
+    // the error logs (the only thing this regex is ever applied to) in exchange for
+    // covering a format nobody can still issue.
     private static readonly Regex TokenPattern = new(
-        @"gh[pousr]_[A-Za-z0-9]{20,}",
+        @"github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}",
         RegexOptions.Compiled);
 
     public GitHubApiClient(HttpClient httpClient)
@@ -46,6 +59,16 @@ public sealed class GitHubApiClient
     public void SetToken(string token)
     {
         _cachedToken = token;
+    }
+
+    // Drop the in-memory credential. Callers disconnecting an account must ALSO
+    // clear the persisted copy in localStorage (see Home.ClearStoredConfigAsync) —
+    // this only sheds the process-lifetime cache, and on its own would be undone by
+    // the next page load.
+    public void ClearConfig()
+    {
+        _config = null;
+        _cachedToken = null;
     }
 
     private void ApplyAuth(HttpRequestMessage request)

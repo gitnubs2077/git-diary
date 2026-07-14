@@ -553,77 +553,12 @@
         await DiaryStore.LoadEntryAsync(today);
     }
 
-    private static string RenderMarkdownHtml(string content)
-    {
-        if (string.IsNullOrEmpty(content))
-            return string.Empty;
-
-        // Use a sanitizing pipeline that strips inline HTML and rewrites
-        // javascript:/vbscript:/data: URLs. Without this the Markdown preview
-        // is a stored-XSS sink that can exfiltrate the GitHub PAT from
-        // localStorage. See P0-SEC-1 in the release audit.
-        return Markdown.ToHtml(content, SafeMarkdownPipeline);
-    }
-
-    private static readonly MarkdownPipeline SafeMarkdownPipeline = BuildSafePipeline();
-
-    private static readonly HashSet<string> AllowedUrlSchemes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "http",
-        "https",
-        "mailto",
-        "tel"
-    };
-
-    private static MarkdownPipeline BuildSafePipeline()
-    {
-        var builder = new MarkdownPipelineBuilder()
-            .DisableHtml()
-            .UseAutoLinks()
-            .UseSoftlineBreakAsHardlineBreak();
-        builder.DocumentProcessed += SanitizeLinks;
-        return builder.Build();
-    }
-
-    private static void SanitizeLinks(MarkdownDocument document)
-    {
-        foreach (var link in document.Descendants<LinkInline>())
-        {
-            if (!IsSafeUrl(link.Url))
-            {
-                link.Url = string.Empty;
-            }
-        }
-
-        foreach (var link in document.Descendants<AutolinkInline>())
-        {
-            if (!IsSafeUrl(link.Url))
-            {
-                link.Url = string.Empty;
-            }
-        }
-    }
-
-    private static bool IsSafeUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-            return true;
-
-        var trimmed = url.TrimStart();
-        if (trimmed.Length == 0)
-            return true;
-
-        // Fragment, root-relative, query-relative, and dot-relative paths are all safe.
-        if (trimmed[0] is '#' or '/' or '?' or '.')
-            return true;
-
-        var colonIdx = trimmed.IndexOf(':');
-        if (colonIdx <= 0)
-            return true; // no scheme → treat as relative
-
-        var scheme = trimmed[..colonIdx];
-        return AllowedUrlSchemes.Contains(scheme);
-    }
+    // The sanitizing pipeline lives in Infrastructure/SafeMarkdown.cs, which is the
+    // app's single trust boundary between diary content and the DOM (this HTML is
+    // handed to innerHTML, bypassing Blazor's escaping). It is kept out of this
+    // component so it can be exercised directly by the regression suite in
+    // tests/GitDiary.Tests/SafeMarkdownTests.cs.
+    private static string RenderMarkdownHtml(string content) => SafeMarkdown.Render(content);
 
     public void Dispose()
     {
