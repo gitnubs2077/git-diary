@@ -63,18 +63,56 @@
     public bool IsOffline { get; set; }
 
     /// <summary>
-    /// Rough word count for the status bar. Splits on whitespace, tolerating any
-    /// stretch of runs (spaces, tabs, newlines). Not a linguistic word count for
-    /// CJK — for those scripts it effectively becomes a "space-delimited run"
-    /// count, which still tracks writing progress meaningfully.
+    /// Mixed CJK / Latin word count for the status bar. Each CJK character
+    /// (Chinese, Japanese kana, Korean syllable) counts as one unit, matching
+    /// what "字" / "語" / "단어" naturally mean in those locales. Runs of
+    /// contiguous Latin letters or digits count as one word. Whitespace and
+    /// punctuation are ignored. This gives a sensible number for pure English,
+    /// pure Chinese, or any mix of the two.
     /// </summary>
     private static int CountWords(string? content)
     {
         if (string.IsNullOrWhiteSpace(content)) return 0;
-        return content.Split(WhitespaceChars, StringSplitOptions.RemoveEmptyEntries).Length;
+
+        var count = 0;
+        var inLatinRun = false;
+
+        foreach (var ch in content)
+        {
+            if (IsCjkCharacter(ch))
+            {
+                count++;
+                inLatinRun = false;
+            }
+            else if (char.IsLetterOrDigit(ch))
+            {
+                if (!inLatinRun)
+                {
+                    count++;
+                    inLatinRun = true;
+                }
+            }
+            else
+            {
+                inLatinRun = false;
+            }
+        }
+
+        return count;
     }
 
-    private static readonly char[] WhitespaceChars = { ' ', '\t', '\r', '\n', '\f', '\v' };
+    private static bool IsCjkCharacter(char ch)
+    {
+        // Covers the ranges we actually see in diary text. Rare Extension B+
+        // ideographs live in surrogate pairs and are undercounted here — an
+        // acceptable trade-off vs. full UTF-32 iteration for a status-bar hint.
+        return (ch >= 0x4E00 && ch <= 0x9FFF)   // CJK Unified Ideographs
+            || (ch >= 0x3400 && ch <= 0x4DBF)   // CJK Extension A
+            || (ch >= 0xF900 && ch <= 0xFAFF)   // CJK Compatibility Ideographs
+            || (ch >= 0x3040 && ch <= 0x309F)   // Hiragana
+            || (ch >= 0x30A0 && ch <= 0x30FF)   // Katakana
+            || (ch >= 0xAC00 && ch <= 0xD7AF);  // Hangul Syllables
+    }
 
     protected override void OnInitialized()
     {
