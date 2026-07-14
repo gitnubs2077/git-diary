@@ -85,7 +85,9 @@ public sealed class DiaryRepository
     {
         var treeResult = await _gitHubApi.GetTreeAsync();
         if (treeResult.IsFailure)
-            return Result<List<DiaryEntryInfo>>.Failure(treeResult.Error!);
+            // Preserve StatusCode so callers can tell an auth failure (401/403) from a
+            // transient/network one — the UI banner wording depends on it.
+            return Result<List<DiaryEntryInfo>>.Failure(treeResult.Error!, treeResult.StatusCode);
 
         var infos = new List<DiaryEntryInfo>();
         foreach (var node in treeResult.Value!)

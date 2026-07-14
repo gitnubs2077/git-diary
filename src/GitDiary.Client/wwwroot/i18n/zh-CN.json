@@ -79,5 +79,11 @@
   "status.entries": "共 {0} 篇",
   "status.words": "{0} 字",
   "status.offline": "离线中 — 修改已在本地排队",
+  "loadError.authTitle": "无法访问你的仓库",
+  "loadError.authBody": "你的 GitHub 令牌被拒绝（可能已失效、已过期，或缺少 Contents 权限）。请用有效的令牌重新连接以继续。",
+  "loadError.genericTitle": "无法加载你的日记",
+  "loadError.genericBody": "GitDiary 无法访问你的仓库。请检查网络连接和仓库设置后重试。",
+  "loadError.reconnect": "重新连接",
+  "loadError.dismiss": "忽略",
   "home.resizerTooltip": "拖动调整宽度 · 双击恢复默认"
 }

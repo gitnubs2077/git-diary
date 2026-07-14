@@ -87,6 +87,51 @@ public sealed class DiaryStore : StoreBase
         }
     }
 
+    // Last failure from loading the entry list or an entry. Before this existed, both
+    // RefreshEntriesAsync and LoadEntryAsync silently swallowed Result.Failure: an
+    // invalid or expired token produced an empty sidebar, an empty editor, and no hint
+    // that authentication was the problem. Home renders a banner off this state.
+    private string? _loadError;
+    private bool _loadErrorIsAuth;
+
+    public string? LoadError
+    {
+        get => _loadError;
+        private set
+        {
+            _loadError = value;
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>True when the last load failure was an auth problem (HTTP 401/403).</summary>
+    public bool LoadErrorIsAuth
+    {
+        get => _loadErrorIsAuth;
+        private set
+        {
+            _loadErrorIsAuth = value;
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>Dismiss the load-error banner without retrying.</summary>
+    public void ClearLoadError()
+    {
+        if (_loadError is null && !_loadErrorIsAuth) return;
+        _loadError = null;
+        _loadErrorIsAuth = false;
+        NotifyStateChanged();
+    }
+
+    private void SetLoadError(string? error, int? statusCode)
+    {
+        _loadErrorIsAuth = statusCode is 401 or 403;
+        // Assign through the property last so the single notification it fires reflects
+        // both fields already updated.
+        LoadError = error;
+    }
+
     public DiaryStore(DiaryRepository diaryRepo, IndexedDbRepository indexedDb, SearchService searchService)
     {
         _diaryRepo = diaryRepo;
@@ -115,6 +160,14 @@ public sealed class DiaryStore : StoreBase
             CurrentContent = entry.Content;
             SyncState = entry.SyncState;
             IsDirty = false;
+            SetLoadError(null, null);
+        }
+        else
+        {
+            // Leave any previously loaded entry untouched, but surface why this load
+            // failed instead of swallowing it. NOT_FOUND never reaches here — the repo
+            // maps a missing file to a blank success entry.
+            SetLoadError(result.Error, result.StatusCode);
         }
 
         IsLoading = false;
@@ -283,6 +336,7 @@ public sealed class DiaryStore : StoreBase
         IsDirty = false;
         IsLoading = false;
         SyncState = SyncState.Synced;
+        SetLoadError(null, null);
     }
 
     public async Task RefreshEntriesAsync()
@@ -291,6 +345,11 @@ public sealed class DiaryStore : StoreBase
         if (result.IsSuccess)
         {
             Entries = result.Value!;
+            SetLoadError(null, null);
+        }
+        else
+        {
+            SetLoadError(result.Error, result.StatusCode);
         }
     }
 

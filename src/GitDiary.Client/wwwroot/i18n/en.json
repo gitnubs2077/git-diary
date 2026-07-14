@@ -79,5 +79,11 @@
   "status.entries": "{0} entries",
   "status.words": "{0} words",
   "status.offline": "Offline — changes are queued locally",
+  "loadError.authTitle": "Can't access your repository",
+  "loadError.authBody": "Your GitHub token was rejected (it may be invalid, expired, or missing Contents access). Reconnect with a valid token to continue.",
+  "loadError.genericTitle": "Couldn't load your diary",
+  "loadError.genericBody": "GitDiary couldn't reach your repository. Check your connection and repo settings, then try again.",
+  "loadError.reconnect": "Reconnect",
+  "loadError.dismiss": "Dismiss",
   "home.resizerTooltip": "Drag to resize · double-click to reset"
 }

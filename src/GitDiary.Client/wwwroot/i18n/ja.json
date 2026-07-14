@@ -79,5 +79,11 @@
   "status.entries": "{0} 件",
   "status.words": "{0} 語",
   "status.offline": "オフライン中 — 変更はローカルに保留されます",
+  "loadError.authTitle": "リポジトリにアクセスできません",
+  "loadError.authBody": "GitHub トークンが拒否されました（無効・期限切れ、または Contents 権限が不足している可能性があります）。有効なトークンで再接続してください。",
+  "loadError.genericTitle": "日記を読み込めませんでした",
+  "loadError.genericBody": "GitDiary はリポジトリに接続できませんでした。接続状況とリポジトリ設定を確認して、もう一度お試しください。",
+  "loadError.reconnect": "再接続",
+  "loadError.dismiss": "閉じる",
   "home.resizerTooltip": "ドラッグで幅を調整 · ダブルクリックでリセット"
 }

@@ -39,6 +39,19 @@ else
         </div>
         <div class="app-resizer" @ref="_resizerRef" title="@L["home.resizerTooltip"]"></div>
         <div class="app-main">
+            @if (DiaryStore.LoadError is not null)
+            {
+                <div class="load-error-banner @(DiaryStore.LoadErrorIsAuth ? "is-auth" : "")" role="alert">
+                    <div class="load-error-text">
+                        <strong>@(DiaryStore.LoadErrorIsAuth ? L["loadError.authTitle"] : L["loadError.genericTitle"])</strong>
+                        <span>@(DiaryStore.LoadErrorIsAuth ? L["loadError.authBody"] : L["loadError.genericBody"])</span>
+                    </div>
+                    <div class="load-error-actions">
+                        <button class="btn-reconnect" @onclick="OpenSettings">@L["loadError.reconnect"]</button>
+                        <button class="btn-error-dismiss" @onclick="DiaryStore.ClearLoadError" aria-label="@L["loadError.dismiss"]">✕</button>
+                    </div>
+                </div>
+            }
             <div class="app-toolbar">
                 <SearchBox OnEntrySelected="OnEntrySelected" />
             </div>
@@ -98,6 +111,12 @@ else
     // on unrelated StateChanged notifications.
     private bool _lastPushedDirty;
     private Action? _onDiaryStateChanged;
+    // Shadow copies of the load-error state Home last rendered. DiaryStore raises
+    // StateChanged on every keystroke (IsDirty toggles), and re-rendering the whole
+    // app shell that often is wasteful — so Home only re-renders when the banner's
+    // own inputs actually change.
+    private string? _lastRenderedLoadError;
+    private bool _lastRenderedLoadErrorIsAuth;
 
     protected override async Task OnInitializedAsync()
     {
@@ -107,7 +126,20 @@ else
         // DiaryStore signals every time IsDirty or the entry list changes.
         // We shadow-track IsDirty so JS can consult it synchronously during
         // beforeunload. Fire-and-forget to keep the callback non-blocking.
-        _onDiaryStateChanged = () => _ = PushDirtyFlagAsync();
+        _onDiaryStateChanged = () =>
+        {
+            _ = PushDirtyFlagAsync();
+
+            // Re-render Home only when the load-error banner's inputs change — not on
+            // every keystroke-driven StateChanged.
+            if (_lastRenderedLoadError != DiaryStore.LoadError ||
+                _lastRenderedLoadErrorIsAuth != DiaryStore.LoadErrorIsAuth)
+            {
+                _lastRenderedLoadError = DiaryStore.LoadError;
+                _lastRenderedLoadErrorIsAuth = DiaryStore.LoadErrorIsAuth;
+                _ = InvokeAsync(StateHasChanged);
+            }
+        };
         DiaryStore.StateChanged += _onDiaryStateChanged;
 
         // Load config from localStorage. These keys legitimately return `null`

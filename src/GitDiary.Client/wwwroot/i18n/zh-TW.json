@@ -79,5 +79,11 @@
   "status.entries": "共 {0} 篇",
   "status.words": "{0} 字",
   "status.offline": "離線中 — 變更已在本機排隊",
+  "loadError.authTitle": "無法存取你的儲存庫",
+  "loadError.authBody": "你的 GitHub 權杖被拒絕（可能已失效、已過期，或缺少 Contents 權限）。請用有效的權杖重新連線以繼續。",
+  "loadError.genericTitle": "無法載入你的日記",
+  "loadError.genericBody": "GitDiary 無法存取你的儲存庫。請檢查網路連線與儲存庫設定後重試。",
+  "loadError.reconnect": "重新連線",
+  "loadError.dismiss": "忽略",
   "home.resizerTooltip": "拖曳調整寬度 · 雙擊還原預設"
 }

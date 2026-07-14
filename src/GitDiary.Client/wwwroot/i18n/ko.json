@@ -79,5 +79,11 @@
   "status.entries": "총 {0}개",
   "status.words": "{0} 단어",
   "status.offline": "오프라인 — 변경 사항이 로컬에 대기 중",
+  "loadError.authTitle": "저장소에 접근할 수 없습니다",
+  "loadError.authBody": "GitHub 토큰이 거부되었습니다(유효하지 않거나 만료되었거나 Contents 권한이 없을 수 있습니다). 유효한 토큰으로 다시 연결하세요.",
+  "loadError.genericTitle": "일기를 불러오지 못했습니다",
+  "loadError.genericBody": "GitDiary가 저장소에 연결하지 못했습니다. 연결 상태와 저장소 설정을 확인한 뒤 다시 시도하세요.",
+  "loadError.reconnect": "다시 연결",
+  "loadError.dismiss": "닫기",
   "home.resizerTooltip": "드래그하여 너비 조정 · 더블 클릭으로 초기화"
 }
