@@ -1670,6 +1670,13 @@ html, body {
     z-index: 200;
 }
 
+/* The gallery's delete-confirm dialog must sit ABOVE the gallery overlay
+   (z-index 1000), or it renders behind the panel and delete clicks fall through
+   to the gallery. Kept below the lightbox (1100). */
+.gallery-modal-overlay {
+    z-index: 1050;
+}
+
 .modal-dialog {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
@@ -1894,3 +1901,247 @@ html, body {
         right: 0.75rem;
         top: 0.5rem;
     }
+
+/* ============================================================
+   Image gallery (modal over the app, opened from the sidebar 🏞️)
+   ============================================================ */
+.gallery-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.5);
+    outline: none;
+}
+
+.gallery-panel {
+    display: flex;
+    flex-direction: column;
+    width: min(1000px, 100%);
+    max-height: 90vh;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.gallery-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+
+.gallery-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.gallery-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.gallery-count {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.gallery-body {
+    padding: 18px;
+    overflow-y: auto;
+}
+
+.gallery-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 200px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.gallery-empty-icon {
+    font-size: 40px;
+    opacity: 0.7;
+}
+
+.gallery-error {
+    color: var(--danger);
+}
+
+.gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 14px;
+}
+
+.gallery-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.gallery-thumb {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-tertiary);
+}
+
+/* The thumbnail is a real button so it is keyboard-focusable and Enter/Space
+   opens the lightbox; the delete control sits over it as a separate sibling. */
+.gallery-thumb-btn {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: zoom-in;
+}
+
+.gallery-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.gallery-thumb-loading {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
+    background-size: 200% 100%;
+    animation: gallery-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes gallery-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.gallery-thumb-fail {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 24px;
+    color: var(--text-muted);
+}
+
+/* Delete control: hidden until the thumbnail is hovered/focused, so the grid
+   stays clean but deletion is one click away. */
+.gallery-delete {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.55);
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.gallery-thumb:hover .gallery-delete,
+.gallery-delete:focus-visible {
+    opacity: 1;
+}
+
+.gallery-delete:hover {
+    background: var(--danger);
+}
+
+.gallery-caption {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gallery-time {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 1px;
+}
+
+/* Lightbox: full-size image viewer opened by clicking a gallery thumbnail.
+   Sits above the gallery (z-index 1000) and its delete modal. */
+.lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px;
+    background: rgba(0, 0, 0, 0.85);
+    outline: none;
+    cursor: zoom-out;
+}
+
+.lightbox-image {
+    max-width: 100%;
+    max-height: 82vh;
+    object-fit: contain;
+    border-radius: 6px;
+    box-shadow: 0 10px 44px rgba(0, 0, 0, 0.6);
+    cursor: default;
+}
+
+.lightbox-close {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.lightbox-close:hover,
+.lightbox-close:focus-visible {
+    background: rgba(255, 255, 255, 0.32);
+}
+
+.lightbox-caption {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 13px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

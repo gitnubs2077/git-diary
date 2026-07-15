@@ -41,7 +41,8 @@ else
                 OnEntrySelected="OnEntrySelected"
                 OnSettingsClicked="OpenSettings"
                 ShowLock="Vault.IsUnlocked"
-                OnLockClicked="LockApp" />
+                OnLockClicked="LockApp"
+                OnGalleryClicked="OpenGallery" />
         </div>
         <div class="app-resizer" @ref="_resizerRef" title="@L["home.resizerTooltip"]"></div>
         <div class="app-main">
@@ -69,6 +70,11 @@ else
             </div>
         </div>
     </div>
+
+    @if (_showGallery)
+    {
+        <ImageGallery OnClose="CloseGallery" />
+    }
 }
 
 @code {
@@ -100,6 +106,7 @@ else
 
     private DateOnly? CurrentDate { get; set; }
     private bool ShowSettings { get; set; }
+    private bool _showGallery;
     // True when a password vault exists but hasn't been unlocked this session. Gates
     // the entire app behind <LockScreen> — config isn't even decrypted until unlock.
     private bool _needsUnlock;
@@ -454,6 +461,16 @@ else
     private void CloseSettings()
     {
         ShowSettings = false;
+    }
+
+    private void OpenGallery()
+    {
+        _showGallery = true;
+    }
+
+    private void CloseGallery()
+    {
+        _showGallery = false;
     }
 
     private void HandleSettingsOverlayKey(KeyboardEventArgs e)

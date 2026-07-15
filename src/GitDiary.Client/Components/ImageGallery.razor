@@ -1,0 +1,255 @@
+@using GitDiary.Client.Services
+@using GitDiary.Client.Models
+@implements IDisposable
+
+<div class="gallery-overlay"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="gallery-title"
+     tabindex="-1"
+     @ref="_overlayRef"
+     @onclick="Close"
+     @onkeydown="HandleKey">
+    <div class="gallery-panel" @onclick:stopPropagation="true">
+        <div class="gallery-header">
+            <h2 id="gallery-title">@L["gallery.title"]</h2>
+            <div class="gallery-header-right">
+                @if (_images is { Count: > 0 })
+                {
+                    <span class="gallery-count">@L.Format("gallery.count", _images.Count)</span>
+                }
+                <button class="btn-icon" @onclick="Close" title="@L["gallery.close"]" aria-label="@L["gallery.close"]">✕</button>
+            </div>
+        </div>
+
+        <div class="gallery-body">
+            @if (_loading)
+            {
+                <div class="gallery-state">@L["gallery.loading"]</div>
+            }
+            else if (_error is not null)
+            {
+                <div class="gallery-state gallery-error">@_error</div>
+            }
+            else if (_images is null || _images.Count == 0)
+            {
+                <div class="gallery-state">
+                    <div class="gallery-empty-icon" aria-hidden="true">🏞️</div>
+                    <p>@L["gallery.empty"]</p>
+                </div>
+            }
+            else
+            {
+                <div class="gallery-grid">
+                    @foreach (var img in _images)
+                    {
+                        <div class="gallery-item" @key="img.Path">
+                            <div class="gallery-thumb">
+                                @if (img.DataUrl is not null)
+                                {
+                                    <button type="button"
+                                            class="gallery-thumb-btn"
+                                            @onclick="() => OpenLightbox(img)"
+                                            title="@L["gallery.viewLarge"]"
+                                            aria-label="@L["gallery.viewLarge"]">
+                                        <img src="@img.DataUrl" alt="@img.FileName" loading="lazy" />
+                                    </button>
+                                }
+                                else if (img.LoadFailed)
+                                {
+                                    <div class="gallery-thumb-fail" title="@L["gallery.loadFailedOne"]">⚠️</div>
+                                }
+                                else
+                                {
+                                    <div class="gallery-thumb-loading" aria-hidden="true"></div>
+                                }
+                                <button class="gallery-delete"
+                                        @onclick="() => AskDelete(img)"
+                                        title="@L["gallery.delete"]"
+                                        aria-label="@L["gallery.delete"]">🗑️</button>
+                            </div>
+                            <div class="gallery-caption" title="@img.Path">@img.FileName</div>
+                            @if (img.CommittedAt is not null)
+                            {
+                                <div class="gallery-time">@img.CommittedAt.Value.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@if (_pendingDelete is not null)
+{
+    @* gallery-modal-overlay lifts this above the gallery overlay (z-index 1000);
+       the shared .modal-overlay sits at 200, which would bury the confirm dialog
+       behind the gallery panel and make delete clicks land on the gallery instead. *@
+    <div class="modal-overlay gallery-modal-overlay" @onclick="CancelDelete">
+        <div class="modal-dialog" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+            <div class="modal-content">
+                <h3>@L["gallery.deleteTitle"]</h3>
+                <p>@L["gallery.deleteConfirm"]</p>
+                <p class="modal-date">@_pendingDelete.FileName</p>
+                <div class="modal-actions">
+                    <button class="btn-cancel" @onclick="CancelDelete">@L["editor.cancel"]</button>
+                    <button class="btn-confirm-delete" @onclick="ConfirmDelete" disabled="@_deleteInFlight">@L["gallery.deleteYes"]</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_lightbox is not null)
+{
+    @* Full-size viewer. Click the backdrop (or ✕ / Esc) to close; clicks on the
+       image itself are swallowed so looking around doesn't dismiss it. *@
+    <div class="lightbox-overlay"
+         role="dialog"
+         aria-modal="true"
+         aria-label="@_lightbox.FileName"
+         tabindex="-1"
+         @ref="_lightboxRef"
+         @onclick="CloseLightbox"
+         @onkeydown="HandleLightboxKey">
+        <button class="lightbox-close" @onclick="CloseLightbox" title="@L["gallery.close"]" aria-label="@L["gallery.close"]">✕</button>
+        <img class="lightbox-image"
+             src="@_lightbox.DataUrl"
+             alt="@_lightbox.FileName"
+             @onclick:stopPropagation="true" />
+        <div class="lightbox-caption">@_lightbox.FileName</div>
+    </div>
+}
+
+@code {
+    [Inject] private ImageService Images { get; set; } = default!;
+    [Inject] private LocalizationService L { get; set; } = default!;
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<GalleryImage>? _images;
+    private bool _loading = true;
+    private string? _error;
+    private GalleryImage? _pendingDelete;
+    private bool _deleteInFlight;
+    private ElementReference _overlayRef;
+    private GalleryImage? _lightbox;
+    private ElementReference _lightboxRef;
+    // Set when the lightbox has just opened, so OnAfterRenderAsync focuses it once
+    // (not on every render) — needed for Esc to work immediately.
+    private bool _focusLightbox;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Images.ListImagesAsync();
+        _loading = false;
+        if (result.IsFailure)
+        {
+            _error = L["gallery.loadError"];
+            return;
+        }
+
+        _images = result.Value!;
+        StateHasChanged();
+
+        // Resolve thumbnails one at a time so they pop in progressively rather than
+        // blocking the whole grid on the slowest fetch. Cached (this-session) images
+        // resolve instantly; older ones each take a GitHub round-trip.
+        foreach (var img in _images)
+        {
+            // Kick off both fetches together so each tile's thumbnail and upload time
+            // resolve in parallel rather than one after the other.
+            var thumbTask = Images.GetDataUrlForPathAsync(img.Path);
+            var dateTask = Images.GetCommitDateAsync(img.Path);
+
+            try
+            {
+                var url = await thumbTask;
+                if (url is not null) img.DataUrl = url;
+                else img.LoadFailed = true;
+            }
+            catch
+            {
+                img.LoadFailed = true;
+            }
+
+            try { img.CommittedAt = await dateTask; }
+            catch { /* time is best-effort — leave it null */ }
+
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Focus the overlay so Esc works immediately.
+            try { await _overlayRef.FocusAsync(); }
+            catch { }
+        }
+
+        if (_focusLightbox)
+        {
+            _focusLightbox = false;
+            try { await _lightboxRef.FocusAsync(); }
+            catch { }
+        }
+    }
+
+    private void OpenLightbox(GalleryImage img)
+    {
+        if (img.DataUrl is null) return; // nothing to enlarge until it has loaded
+        _lightbox = img;
+        _focusLightbox = true;
+    }
+
+    private void CloseLightbox() => _lightbox = null;
+
+    private void HandleLightboxKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") CloseLightbox();
+    }
+
+    private void AskDelete(GalleryImage img) => _pendingDelete = img;
+    private void CancelDelete() => _pendingDelete = null;
+
+    private async Task ConfirmDelete()
+    {
+        if (_pendingDelete is null || _deleteInFlight) return;
+        _deleteInFlight = true;
+        try
+        {
+            var img = _pendingDelete;
+            var res = await Images.DeleteImageAsync(img.Path, img.Sha);
+            if (res.IsSuccess)
+            {
+                _images?.Remove(img);
+                _pendingDelete = null;
+            }
+            else
+            {
+                Console.Error.WriteLine($"[GitDiary] ImageGallery.Delete failed: {res.Error}");
+                _error = L["gallery.deleteFailed"];
+                _pendingDelete = null;
+            }
+        }
+        finally
+        {
+            _deleteInFlight = false;
+        }
+    }
+
+    private async Task Close() => await OnClose.InvokeAsync();
+
+    private async Task HandleKey(KeyboardEventArgs e)
+    {
+        if (e.Key != "Escape") return;
+        if (_lightbox is not null) CloseLightbox();
+        else if (_pendingDelete is not null) CancelDelete();
+        else await Close();
+    }
+
+    public void Dispose() { }
+}

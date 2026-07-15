@@ -99,4 +99,28 @@ public class ImagePathsTests
     {
         Assert.Equal(mime, ImagePaths.MimeForExtension(ext));
     }
+
+    [Theory]
+    [InlineData("Diary/2026/07/assets/15-ab12cd34.png", true)]
+    [InlineData("Diary/2026/07/assets/15-ab12cd34.JPG", true)]   // case-insensitive
+    [InlineData("Diary/2026/12/assets/01-x.webp", true)]
+    [InlineData("Diary/2026/07/15.md", false)]                   // an entry, not an image
+    [InlineData("Diary/2026/07/assets/notes.txt", false)]        // non-image in assets
+    [InlineData("Diary/2026/07/assets/sub/deep.png", false)]     // nested past assets/
+    [InlineData("other/2026/07/assets/15-x.png", false)]         // outside the diary root
+    [InlineData("Diary/assets/x.png", false)]                    // not the YYYY/MM layout
+    [InlineData("", false)]
+    public void IsAssetImagePath_MatchesOnlyDayAssetImages(string path, bool expected)
+    {
+        Assert.Equal(expected, ImagePaths.IsAssetImagePath(path));
+    }
+
+    [Fact]
+    public void IsAssetImagePath_MatchesWhatBuildImagePathProduces()
+    {
+        // The gallery filter and the writer must agree, or uploaded images vanish
+        // from the gallery.
+        var produced = ImagePaths.BuildImagePath(Day, "ab12cd34", "png");
+        Assert.True(ImagePaths.IsAssetImagePath(produced));
+    }
 }

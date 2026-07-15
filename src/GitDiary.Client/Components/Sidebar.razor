@@ -62,6 +62,7 @@
                     </div>
                 }
             </div>
+            <button class="btn-icon" @onclick="Gallery" title="@L["sidebar.gallery"]" aria-label="@L["sidebar.gallery"]">🏞️</button>
             @if (ShowLock)
             {
                 <button class="btn-icon" @onclick="Lock" title="@L["sidebar.lock"]" aria-label="@L["sidebar.lock"]">🔒</button>
@@ -179,6 +180,9 @@
 
     [Parameter]
     public EventCallback OnLockClicked { get; set; }
+
+    [Parameter]
+    public EventCallback OnGalleryClicked { get; set; }
 
     private string SearchKeyword { get; set; } = "";
     private HashSet<int> ExpandedYears { get; set; } = new();
@@ -344,6 +348,11 @@
     private async Task OpenSettings()
     {
         await OnSettingsClicked.InvokeAsync();
+    }
+
+    private async Task Gallery()
+    {
+        await OnGalleryClicked.InvokeAsync();
     }
 
     // System → Light → Dark → Fluent → Windows XP → Mac. Kept as a fallback for

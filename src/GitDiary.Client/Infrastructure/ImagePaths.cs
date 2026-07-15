@@ -24,6 +24,17 @@ public static class ImagePaths
         @"!\[[^\]]*\]\(\s*([^)\s]+)",
         RegexOptions.Compiled);
 
+    // A committed image blob under a day's assets folder, e.g.
+    // Diary/2026/07/assets/15-ab12cd34.png. This is what the gallery lists out of the
+    // git tree, so it must match the exact layout BuildImagePath produces.
+    private static readonly Regex AssetImagePattern = new(
+        $@"^{Regex.Escape(PathHelper.BaseDirectory)}/\d{{4}}/\d{{2}}/assets/[^/]+\.(png|jpe?g|gif|webp|svg|bmp|avif)$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>True when <paramref name="path"/> is an image under a day's assets folder.</summary>
+    public static bool IsAssetImagePath(string? path) =>
+        !string.IsNullOrEmpty(path) && AssetImagePattern.IsMatch(path);
+
     /// <summary>Directory that holds a day's images, e.g. <c>Diary/2026/07/assets</c>.</summary>
     public static string AssetsDirectory(DateOnly date) =>
         $"{PathHelper.BaseDirectory}/{date.Year:D4}/{date.Month:D2}/assets";

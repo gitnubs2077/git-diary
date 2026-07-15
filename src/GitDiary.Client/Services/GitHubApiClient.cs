@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using GitDiary.Client.Infrastructure;
 using GitDiary.Client.Models;
+using Microsoft.AspNetCore.Components.WebAssembly.Http;
 
 namespace GitDiary.Client.Services;
 
@@ -256,6 +257,12 @@ public sealed class GitHubApiClient
         {
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             ApplyAuth(request);
+            // GitHub stamps authenticated API responses with `Cache-Control: private,
+            // max-age=60`, so the browser would serve a stale tree for up to a minute.
+            // That makes just-deleted files (images in the gallery, entries in the
+            // sidebar) reappear until the cache expires. The tree is our source of
+            // truth for "what currently exists" — always fetch it fresh.
+            request.SetBrowserRequestCache(BrowserRequestCache.NoStore);
 
             var response = await _httpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)
@@ -443,6 +450,51 @@ public sealed class GitHubApiClient
         catch (Exception ex)
         {
             return Result<string>.Failure(LogAndFormatException("Fetch image", ex));
+        }
+    }
+
+    /// <summary>
+    /// The commit date of the most recent commit that touched <paramref name="path"/>,
+    /// i.e. when that file was last uploaded. Returns null (as a success) when the path
+    /// has no commit history yet. Used by the gallery to show each image's upload time —
+    /// the file path only encodes the diary DATE, which can differ from when the image
+    /// was actually committed.
+    /// </summary>
+    public async Task<Result<DateTimeOffset?>> GetLastCommitDateAsync(string path)
+    {
+        var url = GetApiUrl($"commits?path={Uri.EscapeDataString(path)}&per_page=1");
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            ApplyAuth(request);
+
+            var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                var msg = LogAndFormatHttpError(HttpMethod.Get, url, response.StatusCode, errorBody);
+                return Result<DateTimeOffset?>.Failure(msg, (int)response.StatusCode);
+            }
+
+            var content = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(content);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
+                return Result<DateTimeOffset?>.Success(null);
+
+            // Prefer the committer date (when it landed in the repo); fall back to author.
+            var commit = root[0].GetProperty("commit");
+            string? dateStr =
+                (commit.TryGetProperty("committer", out var c) && c.TryGetProperty("date", out var cd) ? cd.GetString() : null)
+                ?? (commit.TryGetProperty("author", out var a) && a.TryGetProperty("date", out var ad) ? ad.GetString() : null);
+
+            return DateTimeOffset.TryParse(dateStr, out var when)
+                ? Result<DateTimeOffset?>.Success(when)
+                : Result<DateTimeOffset?>.Success(null);
+        }
+        catch (Exception ex)
+        {
+            return Result<DateTimeOffset?>.Failure(LogAndFormatException("Fetch commit date", ex));
         }
     }
 

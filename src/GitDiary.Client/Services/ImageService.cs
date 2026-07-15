@@ -34,6 +34,10 @@ public sealed class ImageService
     // GitHub round-trip on every keystroke for already-resolved committed images.
     private readonly Dictionary<string, string> _dataUrlCache = new();
 
+    // Commit-date cache keyed by repo path, so reopening the gallery doesn't re-hit
+    // the commits API for images whose upload time we already know.
+    private readonly Dictionary<string, DateTimeOffset?> _commitDateCache = new();
+
     public ImageService(IJSRuntime js, VaultService vault, GitHubApiClient api)
     {
         _js = js;
@@ -79,6 +83,18 @@ public sealed class ImageService
     {
         var abs = ImagePaths.ResolveReference(entryDate, reference);
         if (abs is null) return null;
+        return await ResolveAbsoluteAsync(abs);
+    }
+
+    /// <summary>
+    /// Resolve an absolute repo image path (e.g. from the gallery's tree listing) to a
+    /// <c>data:</c> URL, or null if it can't be loaded.
+    /// </summary>
+    public Task<string?> GetDataUrlForPathAsync(string absolutePath) =>
+        ResolveAbsoluteAsync(absolutePath);
+
+    private async Task<string?> ResolveAbsoluteAsync(string abs)
+    {
         if (_dataUrlCache.TryGetValue(abs, out var cached)) return cached;
 
         string? dataUrl = null;
@@ -100,6 +116,58 @@ public sealed class ImageService
 
         if (dataUrl is not null) _dataUrlCache[abs] = dataUrl;
         return dataUrl;
+    }
+
+    /// <summary>
+    /// List every committed image under the diary's assets folders, newest-path first.
+    /// Pending (not-yet-committed) images aren't in the tree and are intentionally
+    /// excluded — the gallery shows what actually lives in the repo.
+    /// </summary>
+    public async Task<Result<List<GalleryImage>>> ListImagesAsync()
+    {
+        var tree = await _api.GetTreeAsync();
+        if (tree.IsFailure)
+            return Result<List<GalleryImage>>.Failure(tree.Error!, tree.StatusCode);
+
+        var images = tree.Value!
+            .Where(n => n.Type == "blob" && ImagePaths.IsAssetImagePath(n.Path))
+            .Select(n => new GalleryImage { Path = n.Path, Sha = n.Sha, Size = n.Size })
+            .OrderByDescending(g => g.Path, StringComparer.Ordinal)
+            .ToList();
+
+        return Result<List<GalleryImage>>.Success(images);
+    }
+
+    /// <summary>
+    /// The upload (commit) time of a committed image, cached per path. Returns null
+    /// when unknown or the lookup fails — the gallery simply omits the time then.
+    /// </summary>
+    public async Task<DateTimeOffset?> GetCommitDateAsync(string absolutePath)
+    {
+        if (_commitDateCache.TryGetValue(absolutePath, out var cached)) return cached;
+
+        var res = await _api.GetLastCommitDateAsync(absolutePath);
+        if (!res.IsSuccess) return null; // transient — don't cache, allow a later retry
+
+        _commitDateCache[absolutePath] = res.Value;
+        return res.Value;
+    }
+
+    /// <summary>
+    /// Delete a committed image from the repo. Also evicts it from the data-URL cache
+    /// and drops any lingering local copy so it doesn't reappear.
+    /// </summary>
+    public async Task<Result<bool>> DeleteImageAsync(string absolutePath, string sha)
+    {
+        var res = await _api.DeleteFileAsync(absolutePath, sha);
+        if (res.IsFailure) return res;
+
+        _dataUrlCache.Remove(absolutePath);
+        _commitDateCache.Remove(absolutePath);
+        try { await _js.InvokeVoidAsync("gitdiaryImageStore.remove", absolutePath); }
+        catch { /* IndexedDB unavailable — nothing local to drop */ }
+
+        return Result<bool>.Success(true);
     }
 
     /// <summary>
