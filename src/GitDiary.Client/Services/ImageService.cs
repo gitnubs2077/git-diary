@@ -55,11 +55,14 @@ public sealed class ImageService
         if (ext == "bin")
         {
             // Unknown/empty MIME (common for clipboard blobs) — fall back to the
-            // original filename's extension so PNGs don't land as ".bin".
-            var fromName = ExtensionOf(originalName);
-            if (fromName.Length is > 0 and <= 5) ext = fromName;
+            // original filename's extension so PNGs don't land as ".bin". Sanitized:
+            // the filename is arbitrary and this ext flows into the stored path.
+            var fromName = ImagePaths.SafeExtension(ExtensionOf(originalName));
+            if (fromName != "bin") ext = fromName;
         }
-        var effectiveMime = string.IsNullOrEmpty(mime) ? ImagePaths.MimeForExtension(ext) : mime;
+        // Never trust the browser-supplied MIME verbatim — it ends up in a data: URL
+        // that the preview injects as innerHTML. Whitelist it (see ImagePaths.SafeMime).
+        var effectiveMime = ImagePaths.SafeMime(mime, ext);
 
         var id = Guid.NewGuid().ToString("N")[..8];
         var repoPath = ImagePaths.BuildImagePath(date, id, ext);
@@ -102,7 +105,10 @@ public sealed class ImageService
         var pending = await LoadPendingAsync(abs);
         if (pending is not null)
         {
-            dataUrl = $"data:{pending.Mime};base64,{pending.Base64}";
+            // Re-sanitize on read: the stored MIME originated from the browser and this
+            // string is about to enter the preview's innerHTML via a data: URL.
+            var mime = ImagePaths.SafeMime(pending.Mime, ExtensionOf(abs));
+            dataUrl = $"data:{mime};base64,{pending.Base64}";
         }
         else
         {

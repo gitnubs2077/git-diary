@@ -122,6 +122,47 @@ public static class ImagePaths
         _ => "application/octet-stream",
     };
 
+    // The image MIME types this app recognizes — the same set MimeForExtension emits.
+    // Used to sanitize MIME strings that come from the browser (File.type) before they
+    // are trusted; a browser normally emits one of these, but the app must not assume so.
+    private static readonly HashSet<string> AllowedImageMimes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/png", "image/jpeg", "image/gif", "image/webp",
+        "image/svg+xml", "image/bmp", "image/avif",
+    };
+
+    private static readonly Regex SafeExtensionPattern = new("^[a-z0-9]{1,5}$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Returns <paramref name="mime"/> only when it is a known, safe image MIME type;
+    /// otherwise falls back to the MIME implied by <paramref name="extensionFallback"/>.
+    /// This sanitizes MIME strings that originate from the browser (a picked/pasted
+    /// file's <c>type</c>) before they are embedded in a <c>data:</c> URL that the
+    /// preview injects via innerHTML — a stray quote in the MIME would otherwise break
+    /// out of the <c>src="…"</c> attribute. The trust boundary is enforced at this sink,
+    /// not just at storage time, so a value persisted before this guard existed is still
+    /// neutralized on read.
+    /// </summary>
+    public static string SafeMime(string? mime, string extensionFallback)
+    {
+        var m = mime?.Trim();
+        if (!string.IsNullOrEmpty(m) && AllowedImageMimes.Contains(m))
+            return m;
+        return MimeForExtension(extensionFallback);
+    }
+
+    /// <summary>
+    /// Keeps a file extension only if it is short and purely alphanumeric; anything else
+    /// (embedded quotes, slashes, dots, over-long) collapses to <c>bin</c>. Guards the
+    /// repo path and Markdown reference an image is stored under, which is derived from
+    /// an arbitrary picked filename when the MIME is unrecognized.
+    /// </summary>
+    public static string SafeExtension(string? extension)
+    {
+        var e = Normalize(extension);
+        return SafeExtensionPattern.IsMatch(e) ? e : "bin";
+    }
+
     private static string Normalize(string? extension) =>
         (extension ?? "").TrimStart('.').ToLowerInvariant();
 

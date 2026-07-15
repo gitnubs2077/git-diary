@@ -123,4 +123,64 @@ public class ImagePathsTests
         var produced = ImagePaths.BuildImagePath(Day, "ab12cd34", "png");
         Assert.True(ImagePaths.IsAssetImagePath(produced));
     }
+
+    // --- Security: MIME / extension sanitizing ---------------------------------
+    // These strings ultimately land in a data: URL that the preview injects via
+    // innerHTML. A stray quote in the MIME or extension could break out of the
+    // src="…" attribute, so both are whitelisted at the trust boundary.
+
+    [Theory]
+    [InlineData("image/png", "image/png")]
+    [InlineData("image/jpeg", "image/jpeg")]
+    [InlineData("image/webp", "image/webp")]
+    [InlineData("IMAGE/PNG", "IMAGE/PNG")] // case-insensitive match, still safe
+    public void SafeMime_KeepsKnownImageTypes(string mime, string expected)
+    {
+        Assert.Equal(expected, ImagePaths.SafeMime(mime, "png"));
+    }
+
+    [Theory]
+    [InlineData("image/png\";onerror=\"alert(1)")] // attribute-breakout payload
+    [InlineData("image/png; charset=x")]
+    [InlineData("text/html")]
+    [InlineData("")]
+    [InlineData(null)]
+    [InlineData("not a mime")]
+    public void SafeMime_RejectsAnythingElse_FallingBackToExtension(string? mime)
+    {
+        // Falls back to the extension's MIME — never echoes the untrusted input.
+        var result = ImagePaths.SafeMime(mime, "png");
+        Assert.Equal("image/png", result);
+        Assert.DoesNotContain("\"", result);
+        Assert.DoesNotContain("onerror", result);
+    }
+
+    [Fact]
+    public void SafeMime_UnknownMimeAndUnknownExtension_IsInertOctetStream()
+    {
+        Assert.Equal("application/octet-stream", ImagePaths.SafeMime("evil\"payload", "zzz"));
+    }
+
+    [Theory]
+    [InlineData("png", "png")]
+    [InlineData("jpeg", "jpeg")]
+    [InlineData(".PNG", "png")]   // leading dot stripped, lowercased
+    [InlineData("webp", "webp")]
+    public void SafeExtension_KeepsShortAlphanumeric(string ext, string expected)
+    {
+        Assert.Equal(expected, ImagePaths.SafeExtension(ext));
+    }
+
+    [Theory]
+    [InlineData("pn\"g")]          // embedded quote
+    [InlineData("p/g")]            // slash
+    [InlineData("png ")]           // trailing space
+    [InlineData("toolong")]        // > 5 chars
+    [InlineData("a.b")]            // dot
+    [InlineData("")]
+    [InlineData(null)]
+    public void SafeExtension_CollapsesEverythingElseToBin(string? ext)
+    {
+        Assert.Equal("bin", ImagePaths.SafeExtension(ext));
+    }
 }
