@@ -36,13 +36,31 @@ dotnet test tests/GitDiary.Tests   # Security regression suite — see below
 
 Dependencies: `Markdig` (Markdown render), `Blazored.LocalStorage`.
 
+## Optional password vault
+
+The PAT and the draft cache can be encrypted at rest behind a user password (opt-in;
+see `Services/VaultService.cs` + `wwwroot/js/vault-interop.js`). When a vault exists:
+
+- The config lives ONLY as ciphertext under `gitdiary_vault` (AES-GCM, key derived
+  from the password via PBKDF2/600k in Web Crypto). The plaintext `gitdiary_owner/
+  repo/branch/token` keys are removed; `gitdiary_drafts` is stored encrypted too.
+- The derived key is a **non-extractable CryptoKey held only in `vault-interop.js`**
+  — never persisted, never in .NET. A reload starts locked; `<LockScreen>` gates
+  Home (before the `IsConfigured` check) until the password re-derives the key.
+- The password has **no recovery** by design — forgetting it means re-entering the
+  PAT. Don't add a "recovery" path that stashes the password or key anywhere.
+- `VaultService.IsUnlocked` must stay in sync with the JS key. `IndexedDbRepository`
+  reads it to decide whether to encrypt/decrypt drafts. Keep both singletons.
+
+When NO vault exists, the config is the legacy plaintext keys (below).
+
 ## Security Invariants
 
-The GitHub PAT is stored in plaintext `localStorage`. There is no backend and no
-other place to put it, so **any script execution on this origin is a total
-compromise of the user's diary repo**. Three things stand between diary content and
-that outcome. All three are easy to break by accident, so none of them are left to
-reviewer vigilance:
+Unless a vault (above) is active, the GitHub PAT is stored in plaintext
+`localStorage`. There is no backend and no other place to put it, so **any script
+execution on this origin is a total compromise of the user's diary repo**. Three
+things stand between diary content and that outcome. All three are easy to break by
+accident, so none of them are left to reviewer vigilance:
 
 1. **The Markdown pipeline is minimal on purpose.** `Infrastructure/SafeMarkdown.cs`
    is the single trust boundary — its HTML goes to `innerHTML`, bypassing Blazor's

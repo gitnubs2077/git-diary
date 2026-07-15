@@ -6,7 +6,11 @@
 @using GitDiary.Client.Models
 @implements IDisposable
 
-@if (!SettingsStore.IsConfigured)
+@if (_needsUnlock)
+{
+    <LockScreen Unlocked="OnUnlocked" />
+}
+else if (!SettingsStore.IsConfigured)
 {
     <SetupWizard ConfigSaved="OnConfigSaved" />
 }
@@ -87,10 +91,16 @@ else
     private LocalizationService L { get; set; } = default!;
 
     [Inject]
+    private Services.VaultService Vault { get; set; } = default!;
+
+    [Inject]
     private IJSRuntime JsRuntime { get; set; } = default!;
 
     private DateOnly? CurrentDate { get; set; }
     private bool ShowSettings { get; set; }
+    // True when a password vault exists but hasn't been unlocked this session. Gates
+    // the entire app behind <LockScreen> — config isn't even decrypted until unlock.
+    private bool _needsUnlock;
     private ElementReference _resizerRef;
     private bool _resizerAttached;
     // Keep the delegate as a field so Dispose can actually detach it.
@@ -142,10 +152,20 @@ else
         };
         DiaryStore.StateChanged += _onDiaryStateChanged;
 
-        // Load config from localStorage. These keys legitimately return `null`
-        // on first run — hence `<string?>` and the explicit null checks below.
         try
         {
+            // A password vault takes precedence over everything: the config is stored
+            // only as ciphertext, so we can't load it until the user unlocks. Render
+            // <LockScreen> and stop here; OnUnlocked resumes the boot with the
+            // decrypted config.
+            if (await Vault.HasVaultAsync())
+            {
+                _needsUnlock = true;
+                return;
+            }
+
+            // No vault → the legacy plaintext keys. They legitimately return `null`
+            // on first run — hence `<string?>` and the explicit null checks below.
             var owner = await JsRuntime.InvokeAsync<string?>("localStorage.getItem", "gitdiary_owner");
             var repo = await JsRuntime.InvokeAsync<string?>("localStorage.getItem", "gitdiary_repo");
             var branch = await JsRuntime.InvokeAsync<string?>("localStorage.getItem", "gitdiary_branch");
@@ -153,31 +173,13 @@ else
 
             if (!string.IsNullOrEmpty(owner) && !string.IsNullOrEmpty(repo) && !string.IsNullOrEmpty(token))
             {
-                var config = new RepositoryConfig
+                await ApplyConfigAndLoadAsync(new RepositoryConfig
                 {
                     Owner = owner,
                     Repo = repo,
                     Branch = branch ?? "main",
                     Token = token
-                };
-
-                // Order matters: WASM's renderer processes StateHasChanged
-                // synchronously, so the moment SettingsStore.IsConfigured
-                // flips to true, Home re-renders and mounts <Sidebar>, which
-                // in its OnInitializedAsync immediately calls into
-                // GitHubApiClient. Configure the API client FIRST so the
-                // child's synchronous mount path finds a valid _config.
-                GitHubApi.SetConfig(config);
-                GitHubApi.SetToken(token);
-                SettingsStore.SetConfig(config);
-
-                await DiaryStore.RefreshEntriesAsync();
-                var today = PathHelper.GetToday();
-                await OnEntrySelected(today);
-
-                // Attach the browser `online` listener and try to flush any drafts
-                // that were left Pending/Failed in a previous session.
-                await OnlineSync.EnsureStartedAsync();
+                });
             }
             // Otherwise: no config in localStorage yet → SetupWizard renders. That
             // is a normal first-run state, not an error, and needs no logging.
@@ -193,6 +195,33 @@ else
             Console.Error.WriteLine($"[GitDiary] Home.OnInitializedAsync failed: {ex.GetType().Name}: {ex.Message}");
             Console.Error.WriteLine(ex.StackTrace);
         }
+    }
+
+    // Applies a decrypted/loaded config to the API client and stores, then loads the
+    // entry list and today's entry. Shared by the plaintext boot path and the
+    // post-unlock path so the "configure the API client BEFORE flipping
+    // SettingsStore.IsConfigured" ordering is enforced in exactly one place: the
+    // moment IsConfigured flips, WASM synchronously re-renders and mounts <Sidebar>,
+    // whose OnInitializedAsync dives straight into GitHubApiClient.
+    private async Task ApplyConfigAndLoadAsync(RepositoryConfig config)
+    {
+        GitHubApi.SetConfig(config);
+        GitHubApi.SetToken(config.Token);
+        SettingsStore.SetConfig(config);
+
+        await DiaryStore.RefreshEntriesAsync();
+        await OnEntrySelected(PathHelper.GetToday());
+
+        // Attach the browser `online` listener and try to flush any drafts that were
+        // left Pending/Failed in a previous session.
+        await OnlineSync.EnsureStartedAsync();
+    }
+
+    // The lock screen decrypted the vault and handed back the config: resume boot.
+    private async Task OnUnlocked(RepositoryConfig config)
+    {
+        _needsUnlock = false;
+        await ApplyConfigAndLoadAsync(config);
     }
 
     private async Task OnEntrySelected(DateOnly date)
@@ -391,6 +420,10 @@ else
 
             // Drafts hold the diary text itself, not just the credential.
             await Drafts.ClearAllAsync();
+
+            // Remove the encrypted vault too (if any) and drop the in-memory key, so a
+            // disconnect leaves nothing — plaintext or ciphertext — behind.
+            await Vault.DestroyAsync();
         }
         catch (Exception ex)
         {
@@ -409,10 +442,19 @@ else
     {
         if (SettingsStore.Config is not null)
         {
-            await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_owner", SettingsStore.Config.Owner);
-            await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_repo", SettingsStore.Config.Repo);
-            await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_branch", SettingsStore.Config.Branch);
-            await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_token", SettingsStore.Config.Token);
+            if (Vault.IsUnlocked)
+            {
+                // A vault is active: keep the config as ciphertext (same password), never
+                // write the plaintext keys back.
+                await Vault.ReEncryptConfigAsync(SettingsStore.Config);
+            }
+            else
+            {
+                await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_owner", SettingsStore.Config.Owner);
+                await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_repo", SettingsStore.Config.Repo);
+                await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_branch", SettingsStore.Config.Branch);
+                await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_token", SettingsStore.Config.Token);
+            }
 
             GitHubApi.SetConfig(SettingsStore.Config);
             GitHubApi.SetToken(SettingsStore.Config.Token);

@@ -1325,6 +1325,143 @@ html, body {
     font-size: 15px;
 }
 
+/* ===== Lock screen (password gate) ===== */
+.lock-screen {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-primary);
+    padding: 24px;
+}
+
+.lock-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 48px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: var(--shadow-modal);
+}
+
+.lock-header {
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.lock-icon {
+    font-size: 40px;
+    line-height: 1;
+    margin-bottom: 12px;
+}
+
+.lock-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.lock-subtitle {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.lock-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.lock-form input {
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.lock-form input:focus {
+    border-color: var(--accent);
+}
+
+.lock-error {
+    padding: 8px 12px;
+    background: rgba(255, 71, 87, 0.1);
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    color: var(--danger);
+    font-size: 13px;
+}
+
+.lock-footer {
+    margin-top: 24px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+/* ===== Password section inside the setup wizard ===== */
+.form-lock {
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+
+.lock-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.btn-secondary {
+    flex: 1;
+    padding: 10px 16px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-remove-lock {
+    padding: 10px 16px;
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-remove-lock:hover:not(:disabled) {
+    background: var(--danger);
+    color: white;
+}
+
+.lock-message {
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding-top: 2px;
+}
+
 .setup-form {
     display: flex;
     flex-direction: column;

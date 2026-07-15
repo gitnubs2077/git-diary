@@ -16,6 +16,9 @@ builder.Services.AddScoped<GitHubApiClient>();
 builder.Services.AddScoped<DiaryRepository>();
 builder.Services.AddSingleton<IndexedDbRepository>();
 builder.Services.AddSingleton<SearchService>();
+// Singleton so the JS-side unlock state is shared between the UI and the draft
+// cache (IndexedDbRepository reads it to decide whether to encrypt drafts).
+builder.Services.AddSingleton<VaultService>();
 builder.Services.AddScoped<LocalizationService>();
 builder.Services.AddScoped<ThemeService>();
 builder.Services.AddScoped<SyncService>();

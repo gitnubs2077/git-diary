@@ -73,6 +73,61 @@
                 </small>
             </div>
 
+            <div class="form-group form-lock">
+                @if (!_hasVault)
+                {
+                    <label for="lockpw">@L["setup.lockLabel"]</label>
+                    <input
+                        id="lockpw"
+                        type="password"
+                        autocomplete="new-password"
+                        placeholder="@L["setup.lockPlaceholder"]"
+                        value="@LockPassword"
+                        @oninput="OnLockPasswordInput" />
+                    @if (!string.IsNullOrEmpty(LockPassword))
+                    {
+                        <input
+                            type="password"
+                            autocomplete="new-password"
+                            placeholder="@L["setup.lockConfirm"]"
+                            value="@LockPasswordConfirm"
+                            @oninput="OnLockConfirmInput" />
+                    }
+                    <small class="form-hint">@L["setup.lockHint"]</small>
+                }
+                else
+                {
+                    <label>@L["setup.lockChangeLabel"]</label>
+                    <input
+                        type="password"
+                        autocomplete="new-password"
+                        placeholder="@L["setup.lockNewPlaceholder"]"
+                        value="@LockPassword"
+                        @oninput="OnLockPasswordInput" />
+                    <input
+                        type="password"
+                        autocomplete="new-password"
+                        placeholder="@L["setup.lockConfirm"]"
+                        value="@LockPasswordConfirm"
+                        @oninput="OnLockConfirmInput" />
+                    <div class="lock-actions">
+                        <button class="btn-secondary"
+                                @onclick="ChangePasswordAsync"
+                                disabled="@(string.IsNullOrEmpty(LockPassword) || _pwInFlight)">
+                            @L["setup.lockChange"]
+                        </button>
+                        <button class="btn-remove-lock" @onclick="RemovePasswordAsync" disabled="@_pwInFlight">
+                            @L["setup.lockRemove"]
+                        </button>
+                    </div>
+                    <small class="form-hint">@L["setup.lockChangeHint"]</small>
+                }
+                @if (!string.IsNullOrEmpty(_pwMessage))
+                {
+                    <div class="lock-message">@_pwMessage</div>
+                }
+            </div>
+
             @if (!string.IsNullOrEmpty(ErrorMessage))
             {
                 <div class="form-error">❌ @ErrorMessage</div>
@@ -130,6 +185,9 @@
     [Inject]
     private LocalizationService L { get; set; } = default!;
 
+    [Inject]
+    private Services.VaultService Vault { get; set; } = default!;
+
     [Parameter]
     public EventCallback ConfigSaved { get; set; }
 
@@ -168,6 +226,17 @@
     private string Branch { get; set; } = "main";
     private string Token { get; set; } = "";
     private string? ErrorMessage { get; set; }
+
+    // Lock-password state. When no vault exists these fields set an (optional) password
+    // as part of Save; when one exists they drive the change/remove actions.
+    private string LockPassword { get; set; } = "";
+    private string LockPasswordConfirm { get; set; } = "";
+    private bool _hasVault;
+    private bool _pwInFlight;
+    private string? _pwMessage;
+    // Minimum length for a lock password — enough to deter a casual guess without
+    // being onerous. There is no server to rate-limit, so length is the main defense.
+    private const int MinPasswordLength = 6;
 
     // Autofocus target: the first empty text input. Set by OnAfterRenderAsync
     // on the first render only so re-renders during typing don't yank focus.
@@ -218,6 +287,92 @@
             Repo = ExistingConfig.Repo;
             Branch = ExistingConfig.Branch;
             Token = ExistingConfig.Token;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Decide which password UI to show: "set a password" vs. "change/remove".
+        // When a vault exists the app is necessarily unlocked (Home gated us), so the
+        // change/remove actions have a live key to work with.
+        _hasVault = await Vault.HasVaultAsync();
+    }
+
+    private void OnLockPasswordInput(ChangeEventArgs e)
+    {
+        LockPassword = e.Value?.ToString() ?? "";
+        _pwMessage = null;
+    }
+
+    private void OnLockConfirmInput(ChangeEventArgs e)
+    {
+        LockPasswordConfirm = e.Value?.ToString() ?? "";
+        _pwMessage = null;
+    }
+
+    private RepositoryConfig BuildConfig() => new()
+    {
+        Owner = Owner.Trim(),
+        Repo = Repo.Trim(),
+        Branch = string.IsNullOrWhiteSpace(Branch) ? "main" : Branch.Trim(),
+        Token = Token.Trim()
+    };
+
+    // Validates a new password + confirmation. Returns an error message, or null if OK.
+    private string? ValidateNewPassword()
+    {
+        if (LockPassword.Length < MinPasswordLength)
+            return L.Format("setup.errorPwTooShort", MinPasswordLength);
+        if (LockPassword != LockPasswordConfirm)
+            return L["setup.errorPwMismatch"];
+        return null;
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        if (_pwInFlight || string.IsNullOrEmpty(LockPassword)) return;
+        var err = ValidateNewPassword();
+        if (err is not null) { _pwMessage = err; return; }
+
+        _pwInFlight = true;
+        try
+        {
+            await Vault.ChangePasswordAsync(LockPassword, BuildConfig());
+            LockPassword = "";
+            LockPasswordConfirm = "";
+            _pwMessage = L["setup.lockChanged"];
+        }
+        catch (Exception ex)
+        {
+            _pwMessage = L["setup.lockError"];
+            Console.Error.WriteLine($"[GitDiary] SetupWizard.ChangePasswordAsync: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            _pwInFlight = false;
+        }
+    }
+
+    private async Task RemovePasswordAsync()
+    {
+        if (_pwInFlight) return;
+        _pwInFlight = true;
+        try
+        {
+            await Vault.RemoveAsync(BuildConfig());
+            _hasVault = false;
+            LockPassword = "";
+            LockPasswordConfirm = "";
+            _pwMessage = L["setup.lockRemoved"];
+        }
+        catch (Exception ex)
+        {
+            _pwMessage = L["setup.lockError"];
+            Console.Error.WriteLine($"[GitDiary] SetupWizard.RemovePasswordAsync: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            _pwInFlight = false;
         }
     }
 
@@ -327,6 +482,18 @@
                 return;
             }
 
+            // If the user is setting an (optional) lock password, validate it before
+            // spending two API round-trips on the access tests.
+            if (!_hasVault && !string.IsNullOrEmpty(LockPassword))
+            {
+                var pwError = ValidateNewPassword();
+                if (pwError is not null)
+                {
+                    ErrorMessage = pwError;
+                    return;
+                }
+            }
+
             try
             {
                 // Configure the API client BEFORE flipping SettingsStore.IsConfigured.
@@ -354,6 +521,17 @@
                 {
                     ErrorMessage = L["setup.errorNoWrite"];
                     return;
+                }
+
+                // Access verified — if a lock password was provided (and no vault
+                // exists yet), encrypt the config into a vault now. This runs before
+                // ConfigSaved so Home's persist step sees the vault as already active.
+                if (!_hasVault && !string.IsNullOrEmpty(LockPassword))
+                {
+                    await Vault.CreateAsync(LockPassword, config);
+                    _hasVault = true;
+                    LockPassword = "";
+                    LockPasswordConfirm = "";
                 }
 
                 await ConfigSaved.InvokeAsync();

@@ -1,0 +1,126 @@
+@using GitDiary.Client.Models
+@using GitDiary.Client.Services
+@implements IDisposable
+
+<div class="lock-screen" @onkeydown="HandleKey">
+    <div class="lock-card">
+        <div class="lock-header">
+            <div class="lock-icon" aria-hidden="true">🔒</div>
+            <h1 id="lock-title">@L["lock.title"]</h1>
+            <p class="lock-subtitle">@L["lock.subtitle"]</p>
+        </div>
+
+        <div class="lock-form">
+            <input
+                id="lock-password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="@L["lock.placeholder"]"
+                value="@Password"
+                @oninput="OnPasswordInput"
+                @ref="_passwordRef" />
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <div class="lock-error" role="alert">@ErrorMessage</div>
+            }
+
+            <button class="btn-primary"
+                    @onclick="TryUnlockAsync"
+                    disabled="@(string.IsNullOrEmpty(Password) || _unlocking)">
+                @(_unlocking ? L["lock.unlocking"] : L["lock.unlock"])
+            </button>
+        </div>
+
+        <div class="lock-footer">
+            <p>@L["lock.hint"]</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Inject]
+    private VaultService Vault { get; set; } = default!;
+
+    [Inject]
+    private LocalizationService L { get; set; } = default!;
+
+    /// <summary>Raised with the decrypted config once the correct password unlocks the vault.</summary>
+    [Parameter]
+    public EventCallback<RepositoryConfig> Unlocked { get; set; }
+
+    private string Password { get; set; } = "";
+    private string? ErrorMessage { get; set; }
+    private bool _unlocking;
+    private ElementReference _passwordRef;
+    private bool _autofocused;
+
+    protected override void OnInitialized()
+    {
+        L.StateChanged += HandleLocalizationChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_autofocused)
+        {
+            _autofocused = true;
+            try { await _passwordRef.FocusAsync(); } catch { /* not attached yet */ }
+        }
+    }
+
+    private void OnPasswordInput(ChangeEventArgs e)
+    {
+        Password = e.Value?.ToString() ?? "";
+        ErrorMessage = null;
+    }
+
+    private async Task HandleKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrEmpty(Password) && !_unlocking)
+        {
+            await TryUnlockAsync();
+        }
+    }
+
+    private async Task TryUnlockAsync()
+    {
+        if (_unlocking || string.IsNullOrEmpty(Password)) return;
+        _unlocking = true;
+        ErrorMessage = null;
+        try
+        {
+            var config = await Vault.UnlockAsync(Password);
+            if (config is null)
+            {
+                ErrorMessage = L["lock.wrong"];
+                Password = "";
+                return;
+            }
+            await Unlocked.InvokeAsync(config);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = L["lock.error"];
+            Console.Error.WriteLine($"[GitDiary] LockScreen.TryUnlockAsync: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            _unlocking = false;
+        }
+    }
+
+    private async void HandleLocalizationChanged()
+    {
+        try { await InvokeAsync(StateHasChanged); }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] LockScreen.HandleLocalizationChanged: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        L.StateChanged -= HandleLocalizationChanged;
+    }
+}

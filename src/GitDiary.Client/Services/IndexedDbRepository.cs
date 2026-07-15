@@ -14,6 +14,10 @@ public sealed class IndexedDbRepository : IDisposable
     private const string StorageKey = "gitdiary_drafts";
 
     private readonly IJSRuntime _jsRuntime;
+    // When a password vault is unlocked, the drafts blob is encrypted at rest with the
+    // same key that protects the PAT — drafts hold diary text, so they must not sit in
+    // plaintext localStorage. When no vault is active, drafts stay plaintext as before.
+    private readonly VaultService _vault;
     private readonly Dictionary<string, Draft> _drafts = new();
     // Every localStorage round-trip is async, so without a gate two concurrent
     // SaveDraftAsync calls could interleave dictionary writes and racing
@@ -24,9 +28,10 @@ public sealed class IndexedDbRepository : IDisposable
     private bool _loaded;
     private bool _disposed;
 
-    public IndexedDbRepository(IJSRuntime jsRuntime)
+    public IndexedDbRepository(IJSRuntime jsRuntime, VaultService vault)
     {
         _jsRuntime = jsRuntime;
+        _vault = vault;
     }
 
     public async Task SaveDraftAsync(Draft draft)
@@ -132,6 +137,15 @@ public sealed class IndexedDbRepository : IDisposable
                 // localStorage unavailable (e.g. prerender): fall back to in-memory only.
             }
 
+            // With the vault unlocked, `raw` is a ciphertext envelope — decrypt it back
+            // to the drafts JSON before parsing. DecryptStringAsync returns null for a
+            // non-envelope (e.g. plaintext left from before a password was set), so fall
+            // back to `raw` in that case rather than losing those drafts.
+            if (!string.IsNullOrWhiteSpace(raw) && _vault.IsUnlocked)
+            {
+                raw = await _vault.DecryptStringAsync(raw) ?? raw;
+            }
+
             if (!string.IsNullOrWhiteSpace(raw))
             {
                 try
@@ -170,7 +184,10 @@ public sealed class IndexedDbRepository : IDisposable
         try
         {
             var json = JsonSerializer.Serialize(_drafts);
-            await _jsRuntime.InvokeVoidAsync("localStorage.setItem", StorageKey, json);
+            // Encrypt at rest whenever the vault is unlocked, so diary text in drafts
+            // gets the same protection as the PAT.
+            var payload = _vault.IsUnlocked ? await _vault.EncryptStringAsync(json) : json;
+            await _jsRuntime.InvokeVoidAsync("localStorage.setItem", StorageKey, payload);
         }
         catch
         {
