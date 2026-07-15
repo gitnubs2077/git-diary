@@ -392,6 +392,9 @@ html, body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    /* Allow this flex item to shrink below its content's intrinsic width, so wide
+       preview content is contained here instead of stretching the whole layout. */
+    min-width: 0;
 }
 
 .app-toolbar {
@@ -1058,6 +1061,7 @@ html, body {
     font-size: 15px;
     line-height: 1.7;
     tab-size: 4;
+    min-width: 0;
 }
 
 .editor-textarea::placeholder {
@@ -1069,6 +1073,9 @@ html, body {
     padding: 20px 24px;
     overflow-y: auto;
     background: var(--editor-bg);
+    /* Same reason as .app-main: shrinkable so wide content stays inside this pane
+       (matters in split mode, where the preview is a flex column beside the editor). */
+    min-width: 0;
 }
 
 .editor-loading {
@@ -1118,6 +1125,24 @@ html, body {
     color: var(--text-primary);
     font-size: 15px;
     line-height: 1.7;
+    /* Break long unbroken strings (e.g. a bare URL) instead of forcing the
+       preview wider than its column. */
+    overflow-wrap: break-word;
+}
+
+/* Cap embedded media at the column width. Without this a wide image renders at
+   its natural pixel size and, because flex items don't shrink below their content
+   by default, drags the whole app wider than the viewport — pushing the header
+   controls off-screen. Tables (now that pipe-tables render) scroll internally
+   instead of stretching the layout. */
+.markdown-body img {
+    max-width: 100%;
+    height: auto;
+}
+.markdown-body table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
 }
 
 .markdown-body h1 { font-size: 26px; margin-bottom: 16px; color: var(--text-primary); font-weight: 700; }
