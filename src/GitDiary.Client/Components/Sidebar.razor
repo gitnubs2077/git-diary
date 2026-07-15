@@ -62,6 +62,10 @@
                     </div>
                 }
             </div>
+            @if (ShowLock)
+            {
+                <button class="btn-icon" @onclick="Lock" title="@L["sidebar.lock"]" aria-label="@L["sidebar.lock"]">🔒</button>
+            }
             <button class="btn-icon" @onclick="OpenSettings" title="@L["sidebar.settings"]">⚙️</button>
             <button class="btn-new" @onclick="CreateTodayEntry">@L["sidebar.newToday"]</button>
         </div>
@@ -169,6 +173,13 @@
     [Parameter]
     public EventCallback OnSettingsClicked { get; set; }
 
+    // Shown only when a password vault is active — locking is meaningless otherwise.
+    [Parameter]
+    public bool ShowLock { get; set; }
+
+    [Parameter]
+    public EventCallback OnLockClicked { get; set; }
+
     private string SearchKeyword { get; set; } = "";
     private HashSet<int> ExpandedYears { get; set; } = new();
     // Key on (year, month) — using just the month number would collide across years
@@ -212,6 +223,39 @@
             var today = PathHelper.GetToday();
             EnsureExpanded(today);
             await SelectEntry(today);
+        }
+    }
+
+    // Fires whenever the parent re-renders with a (possibly) new SelectedDate — the
+    // path arrow-key navigation takes (Home.CurrentDate → SelectedDate). Keep the
+    // highlighted entry reachable: expand its year/month (a collapsed group doesn't
+    // render its entries at all) and flag a scroll-into-view for after the render.
+    private DateOnly? _lastSelectionShown;
+    private bool _scrollSelectionPending;
+
+    protected override void OnParametersSet()
+    {
+        if (SelectedDate is not null && SelectedDate != _lastSelectionShown)
+        {
+            _lastSelectionShown = SelectedDate;
+            EnsureExpanded(SelectedDate.Value);
+            _scrollSelectionPending = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_scrollSelectionPending)
+        {
+            _scrollSelectionPending = false;
+            try
+            {
+                await JsRuntime.InvokeVoidAsync("gitdiarySidebar.scrollSelectedIntoView");
+            }
+            catch
+            {
+                // JS bridge unavailable or the element isn't in the DOM yet — harmless.
+            }
         }
     }
 
@@ -290,6 +334,11 @@
         var today = PathHelper.GetToday();
         SelectedDate = today;
         await DiaryStore.LoadEntryAsync(today);
+    }
+
+    private async Task Lock()
+    {
+        await OnLockClicked.InvokeAsync();
     }
 
     private async Task OpenSettings()

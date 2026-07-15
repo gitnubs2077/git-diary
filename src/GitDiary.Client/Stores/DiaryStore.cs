@@ -9,6 +9,7 @@ public sealed class DiaryStore : StoreBase
     private readonly DiaryRepository _diaryRepo;
     private readonly IndexedDbRepository _indexedDb;
     private readonly SearchService _searchService;
+    private readonly ImageService _images;
 
     private DiaryEntry? _currentEntry;
     private List<DiaryEntryInfo> _entries = new();
@@ -132,11 +133,12 @@ public sealed class DiaryStore : StoreBase
         LoadError = error;
     }
 
-    public DiaryStore(DiaryRepository diaryRepo, IndexedDbRepository indexedDb, SearchService searchService)
+    public DiaryStore(DiaryRepository diaryRepo, IndexedDbRepository indexedDb, SearchService searchService, ImageService images)
     {
         _diaryRepo = diaryRepo;
         _indexedDb = indexedDb;
         _searchService = searchService;
+        _images = images;
     }
 
     public async Task LoadEntryAsync(DateOnly date)
@@ -228,6 +230,27 @@ public sealed class DiaryStore : StoreBase
         });
         IsDirty = false;
         SyncState = SyncState.Saving;
+
+        // Push any pending (locally-stored) images this entry references BEFORE the
+        // .md is saved — a committed entry must never point at an image GitHub does
+        // not have yet. If an upload fails, abort the commit and leave the draft
+        // intact so the user can retry.
+        var imageResult = await _images.UploadPendingForAsync(CurrentEntry);
+        if (imageResult.IsFailure)
+        {
+            var imageFailState = imageResult.IsConflict ? SyncState.Conflict : SyncState.Failed;
+            CurrentEntry.SyncState = imageFailState;
+            SyncState = imageFailState;
+            await _indexedDb.SaveDraftAsync(new Draft
+            {
+                Path = CurrentEntry.Path,
+                Content = CurrentContent,
+                Sha = CurrentEntry.Sha,
+                State = SyncState.Pending,
+                UpdatedAt = DateTimeOffset.Now
+            });
+            return;
+        }
 
         var result = await _diaryRepo.SaveAsync(CurrentEntry);
         if (result.IsSuccess)

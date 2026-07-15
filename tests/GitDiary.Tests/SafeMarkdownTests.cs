@@ -120,6 +120,43 @@ public class SafeMarkdownTests
         Assert.Contains("<strong>bold</strong>", html);
     }
 
+    [Fact]
+    public void Render_Strikethrough_EmittedByToolbarSyntax()
+    {
+        // The formatting toolbar's "S" button wraps text in ~~…~~. The EmphasisExtras
+        // (Strikethrough) extension must render it, otherwise the button produces
+        // literal tildes in the preview.
+        var html = SafeMarkdown.Render("hello ~~gone~~ world");
+
+        Assert.Contains("<del>gone</del>", html);
+    }
+
+    [Fact]
+    public void Render_PipeTable_EmittedByToolbarSyntax()
+    {
+        // The "table" button inserts a pipe-table skeleton; PipeTables must render it.
+        var html = SafeMarkdown.Render("| A | B |\n| --- | --- |\n| 1 | 2 |");
+
+        Assert.Contains("<table>", html);
+        Assert.Contains("<th>A</th>", html);
+        Assert.Contains("<td>1</td>", html);
+    }
+
+    [Fact]
+    public void Render_EnabledExtensions_StillGrantNoAttributeInjection()
+    {
+        // Enabling EmphasisExtras + PipeTables must NOT reopen the GenericAttributes
+        // hole that UseAdvancedExtensions() would. The {onclick=…} attribute block is
+        // the canonical probe (see AdvancedExtensions_WouldBeXss for the unsafe
+        // baseline). Here it must render INERT: the braces survive as escaped body
+        // text (proving no attribute was parsed) and no live onclick="…" attribute —
+        // unescaped quotes — lands on the tag.
+        var html = SafeMarkdown.Render("# heading {onclick=\"alert(1)\"}");
+
+        Assert.Contains("{onclick", html);                 // stayed literal text
+        Assert.DoesNotContain("onclick=\"alert(1)\"", html); // never a real attribute
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

@@ -14,6 +14,7 @@ builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.
 // Services
 builder.Services.AddScoped<GitHubApiClient>();
 builder.Services.AddScoped<DiaryRepository>();
+builder.Services.AddScoped<ImageService>();
 builder.Services.AddSingleton<IndexedDbRepository>();
 builder.Services.AddSingleton<SearchService>();
 // Singleton so the JS-side unlock state is shared between the UI and the draft

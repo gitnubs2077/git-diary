@@ -361,6 +361,92 @@ public sealed class GitHubApiClient
     }
 
     /// <summary>
+    /// PUT a binary file (create new), e.g. a diary image. Unlike
+    /// <see cref="CreateFileAsync"/>, <paramref name="base64Content"/> is ALREADY the
+    /// base64 of the raw bytes — it must not be UTF-8 re-encoded, or the uploaded file
+    /// would be corrupt. Returns the new blob SHA on success. A 422 (path already
+    /// exists) is treated as success: image paths are content-unique, so a retry that
+    /// finds the blob already there has effectively succeeded and must not block the
+    /// entry commit.
+    /// </summary>
+    public async Task<Result<string>> CreateBinaryFileAsync(string path, string base64Content, string message)
+    {
+        var url = GetApiUrl($"contents/{path}");
+        try
+        {
+            var body = new
+            {
+                message,
+                content = base64Content,
+                branch = _config?.Branch ?? "main"
+            };
+
+            var json = JsonSerializer.Serialize(body, JsonOptions);
+            var request = new HttpRequestMessage(HttpMethod.Put, url)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+            ApplyAuth(request);
+
+            var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity)
+                    return Result<string>.Success(""); // already exists — idempotent
+
+                var errorBody = await response.Content.ReadAsStringAsync();
+                var msg = LogAndFormatHttpError(HttpMethod.Put, url, response.StatusCode, errorBody);
+                return Result<string>.Failure(msg, (int)response.StatusCode);
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(responseBody);
+            var newSha = doc.RootElement.GetProperty("content").GetProperty("sha").GetString() ?? "";
+            return Result<string>.Success(newSha);
+        }
+        catch (Exception ex)
+        {
+            return Result<string>.Failure(LogAndFormatException("Upload image", ex));
+        }
+    }
+
+    /// <summary>
+    /// GET a file's raw bytes as base64. Uses the Contents endpoint with the
+    /// <c>application/vnd.github.raw</c> media type, which (a) stays on api.github.com
+    /// so the request is allowed by the app's connect-src CSP, (b) works for PRIVATE
+    /// repos because it carries the bearer token, and (c) unlike the default JSON
+    /// contents response, is not capped at 1 MB — diary photos routinely exceed that.
+    /// Returned as base64 so the caller can build a <c>data:</c> URL directly.
+    /// </summary>
+    public async Task<Result<string>> GetRawBase64Async(string path)
+    {
+        var url = GetApiUrl($"contents/{path}");
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            ApplyAuth(request);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github.raw"));
+
+            var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    return Result<string>.Failure("NOT_FOUND", (int)response.StatusCode);
+                var errorBody = await response.Content.ReadAsStringAsync();
+                var msg = LogAndFormatHttpError(HttpMethod.Get, url, response.StatusCode, errorBody);
+                return Result<string>.Failure(msg, (int)response.StatusCode);
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            return Result<string>.Success(Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            return Result<string>.Failure(LogAndFormatException("Fetch image", ex));
+        }
+    }
+
+    /// <summary>
     /// Test write access by creating and deleting a temp file. The probe lives
     /// inside <c>Diary/</c> (not the repo root) and is name-randomized to avoid
     /// (a) polluting the user's top-level tree with a stray <c>.gitdiary-test</c>

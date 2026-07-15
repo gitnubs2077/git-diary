@@ -69,6 +69,14 @@ public static class SafeMarkdown
             // inside autolinks. This is what stops <img src=x onerror=alert(1)>.
             .DisableHtml()
             .UseAutoLinks()
+            // Strikethrough (~~text~~) only — the toolbar exposes it. These two
+            // extensions render into a FIXED, attribute-free tag set (<del>, <table>,
+            // <th>, <td>, …). Unlike UseAdvancedExtensions()/GenericAttributes, they
+            // grant no way to inject attributes or raw HTML, so they do not widen the
+            // trust boundary this class defends. The escape guarantee from
+            // DisableHtml() still holds; SafeMarkdownTests pins both facts.
+            .UseEmphasisExtras(Markdig.Extensions.EmphasisExtras.EmphasisExtraOptions.Strikethrough)
+            .UsePipeTables()
             .UseSoftlineBreakAsHardlineBreak();
 
         // DocumentProcessed runs after Markdig has decoded HTML entities and

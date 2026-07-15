@@ -5,7 +5,9 @@ namespace GitDiary.Client.Infrastructure;
 
 public static class PathHelper
 {
-    private const string BaseDirectory = "Diary";
+    // Public so image paths (see ImagePaths) anchor to the same root as entries
+    // instead of hardcoding the literal a second time.
+    public const string BaseDirectory = "Diary";
 
     public static string GetPath(DateOnly date)
     {

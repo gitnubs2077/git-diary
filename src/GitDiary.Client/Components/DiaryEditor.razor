@@ -5,6 +5,8 @@
 @using Markdig
 @using Markdig.Syntax
 @using Markdig.Syntax.Inlines
+@using System.Text.RegularExpressions
+@using System.Net
 @implements IDisposable
 
 <div class="diary-editor">
@@ -58,6 +60,26 @@
             </div>
         </div>
 
+        @if (_viewMode != ViewMode.Preview)
+        {
+            <div class="format-toolbar" role="toolbar" aria-label="@L["editor.formatToolbar"]">
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("heading")' title="@L["editor.fmtHeading"]" aria-label="@L["editor.fmtHeading"]"><strong>H</strong></button>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("bold")' title="@L["editor.fmtBold"]" aria-label="@L["editor.fmtBold"]"><strong>B</strong></button>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("italic")' title="@L["editor.fmtItalic"]" aria-label="@L["editor.fmtItalic"]"><em>I</em></button>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("strike")' title="@L["editor.fmtStrike"]" aria-label="@L["editor.fmtStrike"]"><span style="text-decoration:line-through">S</span></button>
+                <span class="fmt-divider" aria-hidden="true"></span>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("ul")' title="@L["editor.fmtUl"]" aria-label="@L["editor.fmtUl"]">☰</button>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("ol")' title="@L["editor.fmtOl"]" aria-label="@L["editor.fmtOl"]">1.</button>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("quote")' title="@L["editor.fmtQuote"]" aria-label="@L["editor.fmtQuote"]">❝</button>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("code")' title="@L["editor.fmtCode"]" aria-label="@L["editor.fmtCode"]">&lt;/&gt;</button>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("codeblock")' title="@L["editor.fmtCodeBlock"]" aria-label="@L["editor.fmtCodeBlock"]">▦</button>
+                <span class="fmt-divider" aria-hidden="true"></span>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("link")' title="@L["editor.fmtLink"]" aria-label="@L["editor.fmtLink"]">🔗</button>
+                <button type="button" class="fmt-btn" @onclick="AddImageAsync" disabled="@_imageBusy" title="@L["editor.fmtImage"]" aria-label="@L["editor.fmtImage"]">🖼️</button>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("table")' title="@L["editor.fmtTable"]" aria-label="@L["editor.fmtTable"]">⊞</button>
+            </div>
+        }
+
         <div class="editor-content @(_viewMode == ViewMode.Split ? "split" : string.Empty)">
             @if (_viewMode != ViewMode.Preview)
             {
@@ -66,6 +88,7 @@
                     @bind="DiaryStore.CurrentContent"
                     @bind:event="oninput"
                     @onkeyup="HandleInput"
+                    @ref="_textareaRef"
                     rows="20"
                     placeholder="@L["editor.placeholder"]"></textarea>
             }
@@ -137,6 +160,9 @@
     [Inject]
     private IJSRuntime JS { get; set; } = default!;
 
+    [Inject]
+    private ImageService Images { get; set; } = default!;
+
     private enum ViewMode { Edit, Preview, Split }
 
     // Persistence key + accepted string values for the view-mode preference.
@@ -148,7 +174,20 @@
     private ElementReference _deleteDialogRef;
     private ElementReference _deleteConfirmRef;
     private ElementReference _previewRef;
+    private ElementReference _textareaRef;
     private bool _focusDeleteConfirm;
+    // Held for the lifetime of the component so the JS paste handler can call back
+    // into OnImagePasted. Disposed in Dispose().
+    private DotNetObjectReference<DiaryEditor>? _selfRef;
+    // Guards the file-picker button while an attach is in flight (reading a large
+    // image to base64 + storing it can take a beat).
+    private bool _imageBusy;
+
+    // Pulls the src out of every <img> Markdig emits, so the preview can swap diary
+    // image references for resolved data: URLs. SafeMarkdown output is well-formed and
+    // our own filenames are attribute-safe, so a targeted regex is sufficient here.
+    private static readonly Regex ImgSrcRegex =
+        new("<img\\b[^>]*?\\ssrc=\"([^\"]*)\"", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     // While the 2s debounce is armed, the user is actively typing — we pin
     // the preview to this snapshot so mermaid/Markdig don't rebuild per key.
     // Outside of a typing window, `MarkdownContent` reads DiaryStore.CurrentContent
@@ -310,6 +349,96 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    // Toolbar button → JS transforms the textarea selection and dispatches an
+    // `input` event, which flows through the same @bind:event="oninput" path as a
+    // keystroke (so CurrentContent updates and the caret is preserved). We mirror
+    // the typing side-effect by arming the same debounced draft autosave.
+    private async Task FormatAsync(string action)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("gitdiaryEditor.format", _textareaRef, action);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] DiaryEditor.FormatAsync({action}): {ex.GetType().Name}: {ex.Message}");
+            return;
+        }
+        ScheduleDebouncedAutoSave();
+    }
+
+    // Toolbar 🖼️ button: open the OS file picker, then attach the chosen image.
+    private async Task AddImageAsync()
+    {
+        if (_imageBusy || DiaryStore.CurrentEntry is null) return;
+        _imageBusy = true;
+        try
+        {
+            PickedImage? picked;
+            try
+            {
+                picked = await JS.InvokeAsync<PickedImage?>("gitdiaryEditor.pickImage");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[GitDiary] DiaryEditor.pickImage: {ex.GetType().Name}: {ex.Message}");
+                return;
+            }
+            if (picked is null || string.IsNullOrEmpty(picked.Base64)) return;
+            await AttachImageAsync(picked.Mime, picked.Base64, picked.Name);
+        }
+        finally
+        {
+            _imageBusy = false;
+        }
+    }
+
+    // Invoked from the JS paste handler when an image is pasted into the textarea.
+    [JSInvokable]
+    public async Task OnImagePasted(string mime, string base64, string name)
+    {
+        if (DiaryStore.CurrentEntry is null || string.IsNullOrEmpty(base64)) return;
+        await AttachImageAsync(mime, base64, name);
+    }
+
+    // Store the image locally (pending commit) and insert its Markdown reference at
+    // the caret. The bytes go to GitHub only when the entry is committed.
+    private async Task AttachImageAsync(string mime, string base64, string? name)
+    {
+        if (DiaryStore.CurrentEntry is null) return;
+
+        string markdown;
+        try
+        {
+            markdown = await Images.AttachAsync(DiaryStore.CurrentEntry.Date, mime, base64, name);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] DiaryEditor.AttachImage: {ex.GetType().Name}: {ex.Message}");
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("gitdiaryEditor.insertAtCursor", _textareaRef, markdown);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] DiaryEditor.insertImage: {ex.GetType().Name}: {ex.Message}");
+            return;
+        }
+
+        // Mirror the typing side-effect so the draft (with the new reference) autosaves.
+        ScheduleDebouncedAutoSave();
+    }
+
+    private sealed class PickedImage
+    {
+        public string Name { get; set; } = "";
+        public string Mime { get; set; } = "";
+        public string Base64 { get; set; } = "";
+    }
+
     private void HandleInput(KeyboardEventArgs e)
     {
         // Ctrl+S → immediate local save.
@@ -446,6 +575,20 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            // Register the document-level image-paste handler (see editor-interop.js).
+            _selfRef = DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("gitdiaryEditor.enableImagePaste", _selfRef);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[GitDiary] DiaryEditor.enableImagePaste: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
         if (_focusDeleteConfirm && ShowDeleteConfirm)
         {
             _focusDeleteConfirm = false;
@@ -496,6 +639,7 @@
             // wipes any prior mermaid SVGs — they'll be rebuilt from the fresh
             // `<pre><code>` blocks the interop finds.
             var html = RenderMarkdownHtml(source);
+            html = await ResolveImagesInHtmlAsync(html);
             try
             {
                 await JS.InvokeVoidAsync("gitdiaryPreview.setHtml", _previewRef, html);
@@ -560,11 +704,60 @@
     // tests/GitDiary.Tests/SafeMarkdownTests.cs.
     private static string RenderMarkdownHtml(string content) => SafeMarkdown.Render(content);
 
+    // Swap diary image references (pending-local or committed-in-repo) for resolved
+    // data: URLs so the preview can display them — a private repo's images can't load
+    // from a bare <img> URL, and a pending image isn't on GitHub at all yet. External
+    // and data: URLs resolve to null and are left as-is.
+    private async Task<string> ResolveImagesInHtmlAsync(string html)
+    {
+        if (DiaryStore.CurrentEntry is null) return html;
+
+        var matches = ImgSrcRegex.Matches(html);
+        if (matches.Count == 0) return html;
+
+        var date = DiaryStore.CurrentEntry.Date;
+        var replacements = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (Match m in matches)
+        {
+            var src = m.Groups[1].Value;
+            if (replacements.ContainsKey(src)) continue;
+
+            string? dataUrl;
+            try
+            {
+                dataUrl = await Images.ResolveToDataUrlAsync(date, WebUtility.HtmlDecode(src));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[GitDiary] DiaryEditor.ResolveImage: {ex.GetType().Name}: {ex.Message}");
+                continue;
+            }
+            if (dataUrl is not null) replacements[src] = dataUrl;
+        }
+
+        foreach (var (src, dataUrl) in replacements)
+            html = html.Replace($"src=\"{src}\"", $"src=\"{dataUrl}\"");
+
+        return html;
+    }
+
     public void Dispose()
     {
         DiaryStore.StateChanged -= HandleStoreChanged;
         L.StateChanged -= HandleStoreChanged;
         ThemeSvc.StateChanged -= HandleThemeChanged;
         CancelDebounce();
+
+        // Detach the paste callback before disposing the ref, so a late paste event
+        // can't invoke into a torn-down component.
+        try
+        {
+            _ = JS.InvokeVoidAsync("gitdiaryEditor.disableImagePaste");
+        }
+        catch
+        {
+            // JS runtime already gone (page unload) — nothing to detach.
+        }
+        _selfRef?.Dispose();
     }
 }

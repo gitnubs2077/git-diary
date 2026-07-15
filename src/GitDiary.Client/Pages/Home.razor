@@ -39,7 +39,9 @@ else
             <Sidebar
                 SelectedDate="@CurrentDate"
                 OnEntrySelected="OnEntrySelected"
-                OnSettingsClicked="OpenSettings" />
+                OnSettingsClicked="OpenSettings"
+                ShowLock="Vault.IsUnlocked"
+                OnLockClicked="LockApp" />
         </div>
         <div class="app-resizer" @ref="_resizerRef" title="@L["home.resizerTooltip"]"></div>
         <div class="app-main">
@@ -227,6 +229,11 @@ else
     private async Task OnEntrySelected(DateOnly date)
     {
         CurrentDate = date;
+        // Re-render now so the updated CurrentDate flows to <Sidebar SelectedDate>.
+        // Matters for the keyboard-nav path: OnNewerDay/OnOlderDay are [JSInvokable]
+        // and don't auto-render, so without this the sidebar highlight wouldn't follow
+        // arrow-key navigation the way it does a click.
+        StateHasChanged();
         await DiaryStore.LoadEntryAsync(date);
     }
 
@@ -319,6 +326,90 @@ else
         {
             Console.Error.WriteLine($"[GitDiary] Home.OnCtrlS failed: {ex.GetType().Name}: {ex.Message}");
         }
+    }
+
+    // Ctrl/Cmd+Enter → commit to GitHub. Mirrors DiaryEditor's commit button (same
+    // preconditions and flush-draft-first behaviour) so the shortcut and the button
+    // stay consistent; both funnel into DiaryStore.CommitCurrentEntryAsync, which owns
+    // the SyncState the editor renders.
+    private bool _commitShortcutInFlight;
+
+    [JSInvokable]
+    public async Task OnCommitShortcut()
+    {
+        if (_commitShortcutInFlight) return;
+        if (DiaryStore.CurrentEntry is null) return;
+        if (DiaryStore.SyncState == SyncState.Saving) return;
+        if (!DiaryStore.IsDirty && !DiaryStore.HasUncommittedDraft) return;
+
+        _commitShortcutInFlight = true;
+        try
+        {
+            if (DiaryStore.IsDirty)
+            {
+                await DiaryStore.SaveDraftAsync();
+            }
+            await DiaryStore.CommitCurrentEntryAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] Home.OnCommitShortcut failed: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            _commitShortcutInFlight = false;
+        }
+    }
+
+    // Arrow Up / Down → newer / older day. Up moves toward today (matches the
+    // newest-first sidebar order); the future is off-limits, so Up stops at today.
+    [JSInvokable]
+    public Task OnNewerDay() => ShiftDayAsync(+1);
+
+    [JSInvokable]
+    public Task OnOlderDay() => ShiftDayAsync(-1);
+
+    private async Task ShiftDayAsync(int direction)
+    {
+        if (CurrentDate is null) return;
+        // Jump to the nearest day that actually has an entry, skipping empty days.
+        var target = EntryNavigation.FindAdjacent(
+            DiaryStore.Entries.Select(e => e.Date), CurrentDate.Value, direction);
+        if (target is null) return;
+        await OnEntrySelected(target.Value);
+    }
+
+    // Ctrl+L, or the sidebar lock button → return to the lock screen. Only meaningful
+    // when a password vault is active. Flush unsaved edits into the (still-encrypted)
+    // draft cache FIRST, then drop the key and clear in-memory config so nothing
+    // sensitive lingers while locked. OnUnlocked re-applies everything.
+    [JSInvokable]
+    public Task OnLockShortcut() => LockApp();
+
+    private async Task LockApp()
+    {
+        if (!Vault.IsUnlocked) return;
+
+        try
+        {
+            if (DiaryStore.IsDirty)
+            {
+                await DiaryStore.SaveDraftAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] LockApp: failed to flush draft before locking: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        await Vault.LockAsync();
+        GitHubApi.ClearConfig();
+        SettingsStore.ClearConfig();
+        DiaryStore.Reset();
+
+        ShowSettings = false;
+        _needsUnlock = true;
+        StateHasChanged();
     }
 
     /// <summary>Invoked from JS when the browser reports it has come back online.</summary>

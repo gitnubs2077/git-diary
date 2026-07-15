@@ -976,6 +976,56 @@ html, body {
     color: var(--text-primary);
 }
 
+/* Markdown formatting toolbar: a row of syntax-insertion buttons above the
+   textarea. Sits between the action toolbar and the editor body, so it shares
+   the secondary background but uses a lighter, denser button treatment than the
+   primary Save/Commit row. */
+.format-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+
+.fmt-btn {
+    min-width: 30px;
+    height: 30px;
+    padding: 0 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.fmt-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--border);
+    color: var(--text-primary);
+}
+
+.fmt-btn:active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+.fmt-divider {
+    width: 1px;
+    align-self: stretch;
+    margin: 4px 6px;
+    background: var(--border);
+}
+
 .editor-content {
     flex: 1;
     display: flex;

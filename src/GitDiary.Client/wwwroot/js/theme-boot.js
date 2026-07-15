@@ -122,6 +122,14 @@
         MIN: SIDEBAR_MIN,
         MAX: SIDEBAR_MAX,
         DEFAULT: SIDEBAR_DEFAULT,
+        // Bring the currently-selected entry into view. Called after keyboard
+        // navigation so the highlighted day isn't left scrolled off-screen.
+        // `block: 'nearest'` scrolls only when needed, so an already-visible
+        // selection doesn't jump.
+        scrollSelectedIntoView: function () {
+            const el = document.querySelector('.sidebar-list .diary-entry-item.selected');
+            if (el) el.scrollIntoView({ block: 'nearest' });
+        },
         attachResizer: function (handle) {
             if (!handle || handle._gdAttached) return;
             handle._gdAttached = true;
@@ -191,11 +199,17 @@
         isOnline: function () { return navigator.onLine !== false; }
     };
 
-    // Global Ctrl/Cmd+S interceptor. Runs at the document level so the
-    // shortcut works no matter which element has focus — the sidebar,
-    // the search box, the preview pane, or the editor textarea itself.
-    // preventDefault stops the browser's Save-As dialog. Registered
-    // once from Home.OnAfterRenderAsync via a DotNetObjectReference.
+    // Global keyboard shortcuts. Runs at the document level so they work no matter
+    // which element has focus. Registered once from Home.OnAfterRenderAsync via a
+    // DotNetObjectReference; each branch preventDefault's the browser's own binding.
+    //
+    //   Ctrl/Cmd+S      → save the current entry as a local draft (OnCtrlS)
+    //   Ctrl/Cmd+Enter  → commit the current entry to GitHub (OnCommitShortcut)
+    //   Ctrl+L          → lock the app (OnLockShortcut). Ctrl (not Cmd): Cmd+L is
+    //                     the browser's address-bar shortcut on macOS.
+    //   Arrow Up/Down   → newer / older day (OnNewerDay / OnOlderDay), but ONLY when
+    //                     focus is not in a text field, so arrows still move the
+    //                     caret while editing or typing in search.
     window.gitdiaryKeys = {
         _handler: null,
         _ref: null,
@@ -203,12 +217,39 @@
             if (this._handler) return;
             this._ref = dotNetRef;
             const self = this;
+            const invoke = function (name) {
+                try { self._ref && self._ref.invokeMethodAsync(name); }
+                catch (_) { /* .NET side torn down */ }
+            };
             this._handler = function (e) {
-                const isS = e.key === 's' || e.key === 'S';
-                if (isS && (e.ctrlKey || e.metaKey) && !e.altKey) {
+                if (e.altKey) return;
+                const mod = e.ctrlKey || e.metaKey;
+                const k = e.key;
+
+                if ((k === 's' || k === 'S') && mod) {
                     e.preventDefault();
-                    try { self._ref && self._ref.invokeMethodAsync('OnCtrlS'); }
-                    catch (_) { /* ignore */ }
+                    invoke('OnCtrlS');
+                    return;
+                }
+                if (k === 'Enter' && mod) {
+                    e.preventDefault();
+                    invoke('OnCommitShortcut');
+                    return;
+                }
+                // Ctrl+L specifically (not Cmd+L → address bar on macOS).
+                if ((k === 'l' || k === 'L') && e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    invoke('OnLockShortcut');
+                    return;
+                }
+                if ((k === 'ArrowUp' || k === 'ArrowDown') && !mod) {
+                    // Leave the caret alone when the user is actually editing/typing.
+                    const el = document.activeElement;
+                    const tag = el && el.tagName;
+                    if (tag === 'INPUT' || tag === 'TEXTAREA' || (el && el.isContentEditable)) return;
+                    e.preventDefault();
+                    invoke(k === 'ArrowUp' ? 'OnNewerDay' : 'OnOlderDay');
+                    return;
                 }
             };
             window.addEventListener('keydown', this._handler);

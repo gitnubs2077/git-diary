@@ -143,6 +143,17 @@ public sealed class VaultService
         await WriteConfigVaultAsync(config, new DeriveResult { Salt = envelope.Salt!, Iterations = envelope.Iterations });
     }
 
+    /// <summary>
+    /// Lock the app: drop the in-memory key but KEEP the vault, so the same password
+    /// re-opens it. Distinct from <see cref="DestroyAsync"/> (disconnect), which
+    /// deletes the vault outright.
+    /// </summary>
+    public async Task LockAsync()
+    {
+        await _js.InvokeVoidAsync("gitdiaryVault.lock");
+        IsUnlocked = false;
+    }
+
     /// <summary>Drop the in-memory key and the vault entirely (used on disconnect).</summary>
     public async Task DestroyAsync()
     {
