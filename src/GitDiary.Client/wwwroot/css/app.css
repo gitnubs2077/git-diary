@@ -568,7 +568,11 @@ html, body {
 .theme-menu {
     position: absolute;
     top: calc(100% + 6px);
-    right: 0;
+    /* Anchor to the button's LEFT edge (dropping down-right). The theme button is
+       the left-most action, so right-aligning made the 200px menu sprawl left and
+       cover the sidebar title. */
+    left: 0;
+    right: auto;
     z-index: 100;
     min-width: 200px;
     padding: 4px;
@@ -1374,6 +1378,7 @@ html, body {
 }
 
 .setup-card {
+    position: relative;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -1381,6 +1386,32 @@ html, body {
     width: 100%;
     max-width: 560px;
     box-shadow: var(--shadow-modal);
+}
+
+/* Close (✕) in the settings overlay's top-right corner. Only shown when editing
+   an existing config (there's nothing to close back to on first-run setup). */
+.setup-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.setup-close:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
 .setup-header {

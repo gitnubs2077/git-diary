@@ -6,6 +6,10 @@
 
 <div class="setup-wizard" @onkeydown="HandleWizardKey">
     <div class="setup-card">
+        @if (ShowCancel)
+        {
+            <button class="setup-close" @onclick="Cancel" title="@L["setup.cancel"]" aria-label="@L["setup.cancel"]">✕</button>
+        }
         <div class="setup-header">
             <h1 id="settings-title">📔 GitDiary</h1>
             <p class="setup-subtitle">@EffectiveSubtitle</p>
@@ -110,10 +114,6 @@
             }
 
             <div class="form-actions">
-                @if (ShowCancel)
-                {
-                    <button class="btn-cancel-full" @onclick="Cancel">@L["setup.cancel"]</button>
-                }
                 <button class="btn-primary" @onclick="SaveConfigAsync" disabled="@(!IsFormValid || _saveInFlight)">
                     @EffectiveButtonText
                 </button>
