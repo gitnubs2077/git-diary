@@ -1720,8 +1720,20 @@ html, body {
 
 .settings-container {
     width: 100%;
-    max-width: 480px;
+    max-width: 560px;
     animation: fadeIn 0.2s ease;
+}
+
+/* SetupWizard doubles as the full-page first-run screen (height: 100vh + a solid
+   background). Inside the settings overlay that solid, full-height block painted
+   over the dim so the grey didn't cover the page. Here the overlay owns the
+   full-viewport dim + centering, so the wizard is just a transparent card wrapper. */
+.settings-container .setup-wizard {
+    height: auto;
+    min-height: 0;
+    background: transparent;
+    padding: 0;
+    display: block;
 }
 
 @keyframes fadeIn {
