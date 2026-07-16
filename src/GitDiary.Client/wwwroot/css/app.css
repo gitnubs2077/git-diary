@@ -1377,27 +1377,27 @@ html, body {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 48px;
+    padding: 26px 32px;
     width: 100%;
-    max-width: 480px;
+    max-width: 560px;
     box-shadow: var(--shadow-modal);
 }
 
 .setup-header {
     text-align: center;
-    margin-bottom: 36px;
+    margin-bottom: 18px;
 }
 
 .setup-header h1 {
-    font-size: 32px;
+    font-size: 23px;
     font-weight: 700;
-    margin-bottom: 8px;
+    margin-bottom: 3px;
     color: var(--text-primary);
 }
 
 .setup-subtitle {
     color: var(--text-secondary);
-    font-size: 15px;
+    font-size: 13px;
 }
 
 /* ===== Lock screen (password gate) ===== */
@@ -1483,14 +1483,15 @@ html, body {
 
 /* ===== Password section inside the setup wizard ===== */
 .form-lock {
-    padding-top: 16px;
+    padding-top: 12px;
+    margin-top: 2px;
     border-top: 1px solid var(--border);
 }
 
 .lock-actions {
     display: flex;
     gap: 8px;
-    margin-top: 4px;
+    margin-top: 1px;
 }
 
 .btn-secondary {
@@ -1540,23 +1541,43 @@ html, body {
 .setup-form {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 10px;
 }
 
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+/* Each field is a row: label on the left, control(s) on the right. Labels are
+   placed in column 1, everything else in column 2, so hints/extra inputs stack
+   under the control instead of pushing the form taller with a separate line. */
+.form-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    column-gap: 14px;
+    align-items: start;
 }
 
-.form-group label {
+.form-row > label {
+    grid-column: 1;
+    justify-self: end;
+    text-align: right;
     font-size: 13px;
     font-weight: 500;
     color: var(--text-secondary);
+    /* Nudge down so the label baseline lines up with the input text. */
+    padding-top: 9px;
+    line-height: 1.3;
 }
 
-.form-group input {
-    padding: 10px 14px;
+.form-control {
+    grid-column: 2;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.form-control input,
+.form-control select {
+    width: 100%;
+    padding: 8px 12px;
     border-radius: 8px;
     border: 1px solid var(--border);
     background: var(--bg-tertiary);
@@ -1566,34 +1587,23 @@ html, body {
     transition: border-color 0.2s;
 }
 
-.form-group input:focus {
-    border-color: var(--accent);
-}
-
-.form-group input::placeholder {
-    color: var(--text-muted);
-}
-
-.form-group select {
-    padding: 10px 14px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    font-size: 14px;
-    outline: none;
-    transition: border-color 0.2s;
+.form-control select {
     cursor: pointer;
 }
 
-.form-group select:focus {
+.form-control input:focus,
+.form-control select:focus {
     border-color: var(--accent);
 }
 
-.form-hint {
-    font-size: 12px;
+.form-control input::placeholder {
     color: var(--text-muted);
-    line-height: 1.4;
+}
+
+.form-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.35;
 }
 
 .form-hint a {
@@ -1615,12 +1625,14 @@ html, body {
 }
 
 .form-actions {
-    padding-top: 8px;
+    display: flex;
+    gap: 10px;
+    padding-top: 4px;
 }
 
 .btn-primary {
-    width: 100%;
-    padding: 12px 24px;
+    flex: 1;
+    padding: 11px 24px;
     background: var(--accent);
     color: white;
     border: none;
@@ -1629,6 +1641,15 @@ html, body {
     font-weight: 600;
     cursor: pointer;
     transition: background 0.2s;
+}
+
+/* In the actions row the cancel button is a compact secondary sitting beside the
+   primary, not a full-width block. */
+.form-actions .btn-cancel-full {
+    width: auto;
+    flex: 0 0 auto;
+    margin-top: 0;
+    padding: 11px 22px;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -1641,12 +1662,12 @@ html, body {
 }
 
 .setup-footer {
-    margin-top: 24px;
+    margin-top: 12px;
     text-align: center;
 }
 
 .setup-footer p {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-muted);
 }
 
@@ -1772,24 +1793,36 @@ html, body {
    destructive action — it is not a primary flow, but on a shared machine it is
    the one control that matters. */
 .form-disconnect {
-    margin-top: 20px;
-    padding-top: 16px;
+    margin-top: 10px;
+    padding-top: 10px;
     border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
 }
 
+/* Compact, centered button with the hint centered on its own full-width line
+   below it (so the hint stays on one line rather than wrapping). */
 .btn-disconnect {
-    width: 100%;
-    padding: 10px 24px;
+    padding: 7px 16px;
     background: transparent;
     color: var(--danger);
     border: 1px solid var(--danger);
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 13px;
     cursor: pointer;
     transition: all 0.2s;
+}
+
+.form-disconnect > .form-hint {
+    width: 100%;
+    text-align: center;
+}
+
+.form-disconnect > .disconnect-warning,
+.form-disconnect > .disconnect-actions {
+    width: 100%;
 }
 
 .btn-disconnect:hover {
