@@ -18,9 +18,22 @@ window.gitdiaryEditor = (function () {
         el.dispatchEvent(new Event("input", { bubbles: true }));
     }
 
+    function reselect(el, start, end) {
+        try { el.setSelectionRange(start, end); }
+        catch (e) { /* element detached or not focusable — ignore */ }
+    }
+
     function select(el, start, end) {
         el.focus();
         el.setSelectionRange(start, end);
+        // After the `input` event, Blazor's @bind re-render rewrites the textarea's
+        // value from the bound field, which resets the caret AND scroll to the end.
+        // That render runs after this synchronous call, so re-apply the selection
+        // afterwards. rAF restores it before the next paint (no flash) when the tab
+        // is focused; setTimeout is a fallback for when rAF is throttled (e.g. the
+        // tab is backgrounded, where rAF can be paused entirely).
+        requestAnimationFrame(function () { reselect(el, start, end); });
+        setTimeout(function () { reselect(el, start, end); }, 0);
     }
 
     // Wrap the selection with `before`/`after`. Toggles off if the selection is
