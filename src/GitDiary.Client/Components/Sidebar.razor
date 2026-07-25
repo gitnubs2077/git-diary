@@ -8,12 +8,9 @@
 
 <div class="sidebar">
     <div class="sidebar-header">
-        <div class="sidebar-topline">
-            <div class="sidebar-brand">
-                <img src="favicon.svg" alt="" class="sidebar-logo" aria-hidden="true" />
-                <h3>@L["sidebar.title"]</h3>
-            </div>
-            <button class="btn-new" @onclick="CreateTodayEntry">@L["sidebar.newToday"]</button>
+        <div class="sidebar-brand">
+            <img src="favicon.svg" alt="" class="sidebar-logo" aria-hidden="true" />
+            <h3>@L["sidebar.title"]</h3>
         </div>
         <div class="sidebar-header-actions">
             <div class="theme-picker">
@@ -71,6 +68,7 @@
                 <button class="btn-icon" @onclick="Lock" title="@L["sidebar.lock"]" aria-label="@L["sidebar.lock"]">🔒</button>
             }
             <button class="btn-icon" @onclick="OpenSettings" title="@L["sidebar.settings"]">⚙️</button>
+            <button class="btn-new" @onclick="CreateTodayEntry">@L["sidebar.newToday"]</button>
         </div>
     </div>
 

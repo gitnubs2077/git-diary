@@ -507,14 +507,6 @@ html, body {
     border-bottom: 1px solid var(--border);
 }
 
-/* Row 1: brand on the left, the primary "+ Today" action on the right. */
-.sidebar-topline {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
 .sidebar-brand {
     display: flex;
     align-items: center;
@@ -539,6 +531,11 @@ html, body {
     gap: 6px;
     flex-wrap: wrap;
     justify-content: flex-start;
+}
+
+/* "+ Today" sits at the far right of the icon row. */
+.sidebar-header-actions .btn-new {
+    margin-left: auto;
 }
 
 .btn-icon {
