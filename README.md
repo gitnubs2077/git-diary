@@ -42,6 +42,9 @@
 | 📶 **Offline** | Keep writing without a network; sync resumes automatically |
 | ⚔️ **Conflicts** | Detected on SHA mismatch — pick *Overwrite* or *Reload* |
 | 🎨 **Dark theme** | Handcrafted CSS, no Bootstrap, no heavy UI kit |
+| 🔒 **Vault** | Optional password encrypts your PAT and cached drafts at rest (PBKDF2 → AES-GCM) |
+| 🖼️ **Images** | Paste or pick images — auto-compressed, committed alongside the entry, browsable in a gallery with a lightbox |
+| ⌨️ **Shortcuts** | `Ctrl/⌘ + Enter` to commit · `↑ / ↓` to jump between entries · `Ctrl + L` to lock |
 
 ## 🏗 Architecture
 
@@ -214,8 +217,8 @@ The UI never talks to `GitHubApiClient` directly — always through `DiaryStore`
 ## 🔮 Roadmap
 
 - **v1.1** — Tags & Favorites
-- **v1.2** — Image attachments
-- **v1.3** — GitHub OAuth Device Flow (no more manual PATs)
+- ✅ **v1.2** — Image attachments *(shipped: paste / pick, auto-compression, gallery + lightbox)*
+- **v1.3** — ~~GitHub OAuth Device Flow~~ — not planned for the static build: GitHub's OAuth token endpoints send no CORS headers, so a backend-free SPA can't complete the exchange. Fine-grained PATs stay.
 - **v2.0** — GitLab / Gitea / Forgejo support
 
 ## 🤝 Contributing

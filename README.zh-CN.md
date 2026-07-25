@@ -42,6 +42,9 @@
 | 📶 **离线** | 断网也能继续写，网络恢复后自动同步 |
 | ⚔️ **冲突处理** | SHA 不一致时提示 *覆盖远端* 或 *重新加载* |
 | 🎨 **深色主题** | 手写 CSS，不引入 Bootstrap 等重型 UI 框架 |
+| 🔒 **保险箱** | 可选密码，把 PAT 与缓存草稿在本地加密存储（PBKDF2 → AES-GCM） |
+| 🖼️ **图片** | 粘贴或选择图片 — 自动压缩、随日记一起提交、可在图片库/大图查看 |
+| ⌨️ **快捷键** | `Ctrl/⌘ + Enter` 提交 · `↑ / ↓` 在日记间跳转 · `Ctrl + L` 锁定 |
 
 ## 🏗 架构
 
@@ -212,8 +215,8 @@ UI 永远不直接调用 `GitHubApiClient`，一律通过 `DiaryStore`。
 ## 🔮 后续规划
 
 - **v1.1** — 标签 & 收藏
-- **v1.2** — 图片附件
-- **v1.3** — GitHub OAuth Device Flow（不再手动填 PAT）
+- ✅ **v1.2** — 图片附件 *(已实现：粘贴 / 选择、自动压缩、图片库 + 大图查看)*
+- **v1.3** — ~~GitHub OAuth Device Flow~~ — 静态版不做：GitHub 的 OAuth 换 token 端点不发 CORS 头，纯前端 SPA 无法完成授权，需引入后端。继续用 Fine-Grained PAT。
 - **v2.0** — 支持 GitLab / Gitea / Forgejo
 
 ## 🤝 参与贡献
