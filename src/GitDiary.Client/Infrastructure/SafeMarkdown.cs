@@ -77,6 +77,11 @@ public static class SafeMarkdown
             // DisableHtml() still holds; SafeMarkdownTests pins both facts.
             .UseEmphasisExtras(Markdig.Extensions.EmphasisExtras.EmphasisExtraOptions.Strikethrough)
             .UsePipeTables()
+            // Task lists (- [ ] / - [x]) render as a DISABLED <input type="checkbox">
+            // — a fixed, attribute-limited element with no way to inject attributes or
+            // raw HTML, so it stays inside the same trust boundary as the two above.
+            // (Ported from upstream cholf5/git-diary f92a306.)
+            .UseTaskLists()
             .UseSoftlineBreakAsHardlineBreak();
 
         // DocumentProcessed runs after Markdig has decoded HTML entities and

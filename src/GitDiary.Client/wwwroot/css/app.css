@@ -1187,6 +1187,32 @@ html, body {
     text-decoration: underline;
 }
 
+/* Task lists (GFM): Markdig's UseTaskLists emits
+     <ul class="contains-task-list">
+       <li class="task-list-item"><input type="checkbox" disabled [checked] /> …</li>
+   Strip bullet + list indent so the checkbox sits at the left edge, and dim
+   the text of completed items so scanning a long todo list is easy.
+   (Ported from upstream cholf5/git-diary f92a306.) */
+.markdown-body ul.contains-task-list {
+    list-style: none;
+    padding-left: 4px;
+}
+.markdown-body li.task-list-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.markdown-body li.task-list-item > input[type="checkbox"] {
+    margin: 0.35em 0 0 0;
+    accent-color: var(--accent);
+    cursor: default;
+    flex-shrink: 0;
+}
+.markdown-body li.task-list-item > input[type="checkbox"]:checked ~ * {
+    color: var(--text-secondary);
+    text-decoration: line-through;
+}
+
 /* Mermaid preview: centre the SVG and give render errors a visible surface
    without breaking the surrounding markdown flow. */
 .markdown-body .mermaid {

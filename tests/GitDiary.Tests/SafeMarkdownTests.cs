@@ -143,6 +143,17 @@ public class SafeMarkdownTests
     }
 
     [Fact]
+    public void Render_TaskList_EmitsDisabledCheckboxes()
+    {
+        // GFM task lists render as disabled checkboxes (ported from upstream f92a306).
+        var html = SafeMarkdown.Render("- [ ] todo\n- [x] done");
+
+        Assert.Contains("type=\"checkbox\"", html);
+        Assert.Contains("disabled", html);
+        Assert.Contains("checked", html); // the [x] item
+    }
+
+    [Fact]
     public void Render_EnabledExtensions_StillGrantNoAttributeInjection()
     {
         // Enabling EmphasisExtras + PipeTables must NOT reopen the GenericAttributes
