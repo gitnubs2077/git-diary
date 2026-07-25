@@ -8,9 +8,12 @@
 
 <div class="sidebar">
     <div class="sidebar-header">
-        <div class="sidebar-brand">
-            <img src="favicon.svg" alt="" class="sidebar-logo" aria-hidden="true" />
-            <h3>@L["sidebar.title"]</h3>
+        <div class="sidebar-topline">
+            <div class="sidebar-brand">
+                <img src="favicon.svg" alt="" class="sidebar-logo" aria-hidden="true" />
+                <h3>@L["sidebar.title"]</h3>
+            </div>
+            <button class="btn-new" @onclick="CreateTodayEntry">@L["sidebar.newToday"]</button>
         </div>
         <div class="sidebar-header-actions">
             <div class="theme-picker">
@@ -68,17 +71,7 @@
                 <button class="btn-icon" @onclick="Lock" title="@L["sidebar.lock"]" aria-label="@L["sidebar.lock"]">🔒</button>
             }
             <button class="btn-icon" @onclick="OpenSettings" title="@L["sidebar.settings"]">⚙️</button>
-            <button class="btn-new" @onclick="CreateTodayEntry">@L["sidebar.newToday"]</button>
         </div>
-    </div>
-
-    <div class="sidebar-search">
-        <input
-            type="text"
-            placeholder="@L["sidebar.searchPlaceholder"]"
-            @bind="SearchKeyword"
-            @bind:event="oninput"
-            @onkeyup="HandleSearchKeyUp" />
     </div>
 
     <div class="sidebar-list">
@@ -184,7 +177,6 @@
     [Parameter]
     public EventCallback OnGalleryClicked { get; set; }
 
-    private string SearchKeyword { get; set; } = "";
     private HashSet<int> ExpandedYears { get; set; } = new();
     // Key on (year, month) — using just the month number would collide across years
     // (e.g. expanding July 2025 would also expand July 2024).
@@ -481,15 +473,6 @@
         _cachedGroupsSource = entries;
         _cachedGroupsCount = entries.Count;
         return grouped;
-    }
-
-    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(SearchKeyword))
-        {
-            // Search will be handled by SearchBox component
-        }
-        await Task.CompletedTask;
     }
 
     public void Dispose()

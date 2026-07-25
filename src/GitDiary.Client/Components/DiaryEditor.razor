@@ -66,10 +66,12 @@
                 <button type="button" class="fmt-btn" @onclick='() => FormatAsync("heading")' title="@L["editor.fmtHeading"]" aria-label="@L["editor.fmtHeading"]"><strong>H</strong></button>
                 <button type="button" class="fmt-btn" @onclick='() => FormatAsync("bold")' title="@L["editor.fmtBold"]" aria-label="@L["editor.fmtBold"]"><strong>B</strong></button>
                 <button type="button" class="fmt-btn" @onclick='() => FormatAsync("italic")' title="@L["editor.fmtItalic"]" aria-label="@L["editor.fmtItalic"]"><em>I</em></button>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("underline")' title="@L["editor.fmtUnderline"]" aria-label="@L["editor.fmtUnderline"]"><span style="text-decoration:underline">U</span></button>
                 <button type="button" class="fmt-btn" @onclick='() => FormatAsync("strike")' title="@L["editor.fmtStrike"]" aria-label="@L["editor.fmtStrike"]"><span style="text-decoration:line-through">S</span></button>
                 <span class="fmt-divider" aria-hidden="true"></span>
                 <button type="button" class="fmt-btn" @onclick='() => FormatAsync("ul")' title="@L["editor.fmtUl"]" aria-label="@L["editor.fmtUl"]">☰</button>
                 <button type="button" class="fmt-btn" @onclick='() => FormatAsync("ol")' title="@L["editor.fmtOl"]" aria-label="@L["editor.fmtOl"]">1.</button>
+                <button type="button" class="fmt-btn" @onclick='() => FormatAsync("tasklist")' title="@L["editor.fmtTaskList"]" aria-label="@L["editor.fmtTaskList"]">☑</button>
                 <button type="button" class="fmt-btn" @onclick='() => FormatAsync("quote")' title="@L["editor.fmtQuote"]" aria-label="@L["editor.fmtQuote"]">❝</button>
                 <button type="button" class="fmt-btn" @onclick='() => FormatAsync("code")' title="@L["editor.fmtCode"]" aria-label="@L["editor.fmtCode"]">&lt;/&gt;</button>
                 <button type="button" class="fmt-btn" @onclick='() => FormatAsync("codeblock")' title="@L["editor.fmtCodeBlock"]" aria-label="@L["editor.fmtCodeBlock"]">▦</button>

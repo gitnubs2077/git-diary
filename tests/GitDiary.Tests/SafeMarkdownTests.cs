@@ -132,6 +132,17 @@ public class SafeMarkdownTests
     }
 
     [Fact]
+    public void Render_Underline_EmittedByToolbarSyntax()
+    {
+        // The toolbar's "U" button wraps text in ++…++. The EmphasisExtras (Inserted)
+        // extension must render it as <ins> (underlined) — Markdown has no native
+        // underline and DisableHtml() escapes raw <u>.
+        var html = SafeMarkdown.Render("hello ++under++ world");
+
+        Assert.Contains("<ins>under</ins>", html);
+    }
+
+    [Fact]
     public void Render_PipeTable_EmittedByToolbarSyntax()
     {
         // The "table" button inserts a pipe-table skeleton; PipeTables must render it.

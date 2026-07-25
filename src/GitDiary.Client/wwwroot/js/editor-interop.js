@@ -1,21 +1,40 @@
-// Markdown formatting toolbar for the diary <textarea>.
+// Markdown formatting toolbar (+ image attach) for the diary <textarea>.
 //
-// Every action mutates the textarea's value in place and dispatches a synthetic
-// `input` event. That event is what Blazor's `@bind:event="oninput"` listens for,
-// so the edit flows into DiaryStore.CurrentContent through the exact same path as
-// a keystroke — which means Blazor treats the new string as user input and does
-// NOT re-write the DOM value on its next render, leaving our caret/selection
-// intact. Do not try to set CurrentContent from C# instead; that round-trip would
+// Every text mutation goes through `document.execCommand("insertText", ...)` on the
+// focused textarea. That is what preserves the browser's native undo/redo stack:
+// assigning `el.value = ...` directly is NOT an undoable operation in any browser,
+// so a user pressing Ctrl+Z after clicking Bold would wipe out every keystroke back
+// to the last checkpoint. `insertText` also fires the `input` event itself, which is
+// what Blazor's `@bind:event="oninput"` listens for — so the edit flows into
+// DiaryStore.CurrentContent through the exact same path as a keystroke, and Blazor
+// treats it as user input (it does not rewrite the value / reset the caret on the
+// next render). Do not set CurrentContent from C# instead; that round-trip would
 // clobber the selection.
 //
-// All logic lives here (not in C#) because it is inherently coupled to the live
-// selectionStart/selectionEnd of the DOM element. Keeping it in one place makes it
-// readable; the markdown transforms themselves are simple string slicing.
+// All logic lives here (not in C#) because it is coupled to the live
+// selectionStart/selectionEnd of the DOM element and to the browser-native undo
+// history, which only responds to `document.execCommand` on the focused element.
+//
+// `document.execCommand("insertText")` is marked "deprecated" in MDN but is the only
+// way to programmatically insert text into a <textarea> while preserving the undo
+// stack; every major browser still ships it for exactly this case. If a browser ever
+// refuses it, replaceRange() returns false and the action becomes a no-op rather than
+// silently regressing undo.
 window.gitdiaryEditor = (function () {
     "use strict";
 
-    function fireInput(el) {
-        el.dispatchEvent(new Event("input", { bubbles: true }));
+    // Replace [start, end) in the focused textarea with `text`, preserving undo.
+    // Returns false if the browser refused the command — callers then no-op.
+    function replaceRange(el, start, end, text) {
+        el.focus();
+        el.setSelectionRange(start, end);
+        // insertText fires a trusted "input" event (bubbles), so Blazor's
+        // @bind:event="oninput" picks it up without us dispatching one.
+        try {
+            return document.execCommand("insertText", false, text);
+        } catch (e) {
+            return false;
+        }
     }
 
     function reselect(el, start, end) {
@@ -26,12 +45,10 @@ window.gitdiaryEditor = (function () {
     function select(el, start, end) {
         el.focus();
         el.setSelectionRange(start, end);
-        // After the `input` event, Blazor's @bind re-render rewrites the textarea's
-        // value from the bound field, which resets the caret AND scroll to the end.
-        // That render runs after this synchronous call, so re-apply the selection
-        // afterwards. rAF restores it before the next paint (no flash) when the tab
-        // is focused; setTimeout is a fallback for when rAF is throttled (e.g. the
-        // tab is backgrounded, where rAF can be paused entirely).
+        // Defense-in-depth: should any re-render rewrite the value and reset the
+        // caret/scroll to the end, re-apply the selection after it. rAF restores it
+        // before the next paint (no flash) when focused; setTimeout is the fallback
+        // for when rAF is throttled (backgrounded tab).
         requestAnimationFrame(function () { reselect(el, start, end); });
         setTimeout(function () { reselect(el, start, end); }, 0);
     }
@@ -45,13 +62,13 @@ window.gitdiaryEditor = (function () {
         const e = el.selectionEnd;
         const inner = val.slice(s, e);
 
-        // Already wrapped (markers just outside the selection) → unwrap.
+        // Already wrapped (markers just outside the selection) → unwrap by replacing
+        // the marker+inner+marker span with just the inner text.
         if (inner.length > 0 &&
             val.slice(s - before.length, s) === before &&
             val.slice(e, e + after.length) === after) {
-            el.value = val.slice(0, s - before.length) + inner + val.slice(e + after.length);
-            fireInput(el);
-            select(el, s - before.length, e - before.length);
+            if (!replaceRange(el, s - before.length, e + after.length, inner)) return;
+            select(el, s - before.length, s - before.length + inner.length);
             return;
         }
 
@@ -59,15 +76,13 @@ window.gitdiaryEditor = (function () {
         if (inner.startsWith(before) && inner.endsWith(after) &&
             inner.length >= before.length + after.length) {
             const stripped = inner.slice(before.length, inner.length - after.length);
-            el.value = val.slice(0, s) + stripped + val.slice(e);
-            fireInput(el);
+            if (!replaceRange(el, s, e, stripped)) return;
             select(el, s, s + stripped.length);
             return;
         }
 
         const text = inner.length > 0 ? inner : (placeholder || "");
-        el.value = val.slice(0, s) + before + text + after + val.slice(e);
-        fireInput(el);
+        if (!replaceRange(el, s, e, before + text + after)) return;
         // Select the inner text so repeated formatting / typing-over works.
         select(el, s + before.length, s + before.length + text.length);
     }
@@ -85,8 +100,7 @@ window.gitdiaryEditor = (function () {
         const allHave = lines.every(l => l.startsWith(prefix));
         const out = lines.map(l => allHave ? l.slice(prefix.length) : prefix + l).join("\n");
 
-        el.value = val.slice(0, lineStart) + out + val.slice(lineEnd);
-        fireInput(el);
+        if (!replaceRange(el, lineStart, lineEnd, out)) return;
         select(el, lineStart, lineStart + out.length);
     }
 
@@ -106,8 +120,7 @@ window.gitdiaryEditor = (function () {
             .map((l, i) => allHave ? l.replace(numbered, "") : `${i + 1}. ${l}`)
             .join("\n");
 
-        el.value = val.slice(0, lineStart) + out + val.slice(lineEnd);
-        fireInput(el);
+        if (!replaceRange(el, lineStart, lineEnd, out)) return;
         select(el, lineStart, lineStart + out.length);
     }
 
@@ -126,8 +139,7 @@ window.gitdiaryEditor = (function () {
         const next = level >= 3 ? 0 : level + 1;
         const out = next === 0 ? body : "#".repeat(next) + " " + body;
 
-        el.value = val.slice(0, lineStart) + out + val.slice(lineEnd);
-        fireInput(el);
+        if (!replaceRange(el, lineStart, lineEnd, out)) return;
         const caret = lineStart + out.length;
         select(el, caret, caret);
     }
@@ -138,23 +150,9 @@ window.gitdiaryEditor = (function () {
         const s = el.selectionStart;
         const e = el.selectionEnd;
         const text = val.slice(s, e) || "link text";
-        const snippet = `[${text}](url)`;
-        el.value = val.slice(0, s) + snippet + val.slice(e);
-        fireInput(el);
+        if (!replaceRange(el, s, e, `[${text}](url)`)) return;
         const urlStart = s + text.length + 3; // past "[text]("
         select(el, urlStart, urlStart + 3);   // selects "url"
-    }
-
-    function insertImage(el) {
-        const val = el.value;
-        const s = el.selectionStart;
-        const e = el.selectionEnd;
-        const alt = val.slice(s, e) || "alt text";
-        const snippet = `![${alt}](url)`;
-        el.value = val.slice(0, s) + snippet + val.slice(e);
-        fireInput(el);
-        const urlStart = s + alt.length + 4; // past "![alt]("
-        select(el, urlStart, urlStart + 3);
     }
 
     // Fenced code block wrapping the selection (or a placeholder).
@@ -166,8 +164,7 @@ window.gitdiaryEditor = (function () {
         // Ensure the fences sit on their own lines.
         const lead = (s > 0 && val[s - 1] !== "\n") ? "\n" : "";
         const snippet = `${lead}\`\`\`\n${body}\n\`\`\`\n`;
-        el.value = val.slice(0, s) + snippet + val.slice(e);
-        fireInput(el);
+        if (!replaceRange(el, s, e, snippet)) return;
         const bodyStart = s + lead.length + 4; // past leading \n + "```\n"
         select(el, bodyStart, bodyStart + body.length);
     }
@@ -175,14 +172,14 @@ window.gitdiaryEditor = (function () {
     function insertTable(el) {
         const val = el.value;
         const s = el.selectionStart;
+        const e = el.selectionEnd;
         const lead = (s > 0 && val[s - 1] !== "\n") ? "\n" : "";
         const snippet =
             lead +
             "| Column A | Column B |\n" +
             "| --- | --- |\n" +
             "| Cell 1 | Cell 2 |\n";
-        el.value = val.slice(0, s) + snippet + val.slice(s);
-        fireInput(el);
+        if (!replaceRange(el, s, e, snippet)) return;
         const caret = s + lead.length + 2; // just inside the first cell "| "
         select(el, caret, caret + 8);      // selects "Column A"
     }
@@ -191,14 +188,18 @@ window.gitdiaryEditor = (function () {
         heading: cycleHeading,
         bold: el => wrapToggle(el, "**", "**", "bold text"),
         italic: el => wrapToggle(el, "*", "*", "italic text"),
+        // Underline renders via Markdig's Inserted extension (++text++ → <ins>);
+        // Markdown has no native underline and DisableHtml() escapes raw <u>.
+        underline: el => wrapToggle(el, "++", "++", "underline text"),
         strike: el => wrapToggle(el, "~~", "~~", "strikethrough"),
         code: el => wrapToggle(el, "`", "`", "code"),
         ul: el => linePrefixToggle(el, "- "),
         ol: orderedList,
+        // GFM task list: toggles a "- [ ] " checkbox prefix on each selected line.
+        tasklist: el => linePrefixToggle(el, "- [ ] "),
         quote: el => linePrefixToggle(el, "> "),
         codeblock: codeBlock,
         link: insertLink,
-        image: insertImage,
         table: insertTable,
     };
 
@@ -377,14 +378,12 @@ window.gitdiaryEditor = (function () {
             if (fn) fn(el);
             el.focus();
         },
-        // Insert text at the caret, replacing any selection, then place the caret
-        // after it. Fires input so Blazor's @bind picks up the change (same path as
-        // the format buttons).
+        // Insert text at the caret (replacing any selection) via execCommand so the
+        // insert stays on the undo stack, then place the caret after it.
         insertAtCursor: function (el, text) {
             if (!el) return;
             const s = el.selectionStart, e = el.selectionEnd;
-            el.value = el.value.slice(0, s) + text + el.value.slice(e);
-            fireInput(el);
+            if (!replaceRange(el, s, e, text)) return;
             const caret = s + text.length;
             select(el, caret, caret);
         },

@@ -14,7 +14,7 @@
 }
 
 :root {
-    --sidebar-width: 350px;
+    --sidebar-width: 250px;
 
     /* Pre-JS fallback (matches default/dark). The boot script sets [data-mode]
        and [data-skin] before Blazor renders, so users only see this palette in
@@ -499,13 +499,20 @@ html, body {
 }
 
 .sidebar-header {
-    padding: 16px;
+    padding: 12px 14px;
     display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px 12px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
     border-bottom: 1px solid var(--border);
+}
+
+/* Row 1: brand on the left, the primary "+ Today" action on the right. */
+.sidebar-topline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
 }
 
 .sidebar-brand {
@@ -523,14 +530,15 @@ html, body {
     display: block;
 }
 
+/* Row 2: the utility icons on their own line, so the header no longer needs to be
+   wide enough to fit brand + every control on one row — letting the sidebar be
+   narrower and giving the split editor more room. */
 .sidebar-header-actions {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
-    justify-content: flex-end;
-    /* When the header wraps to a second line, keep actions right-aligned. */
-    margin-left: auto;
+    justify-content: flex-start;
 }
 
 .btn-icon {
@@ -655,30 +663,6 @@ html, body {
 
 .btn-new:hover {
     background: var(--accent-hover);
-}
-
-.sidebar-search {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-}
-
-.sidebar-search input {
-    width: 100%;
-    padding: 8px 12px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    font-size: 13px;
-    outline: none;
-}
-
-.sidebar-search input:focus {
-    border-color: var(--accent);
-}
-
-.sidebar-search input::placeholder {
-    color: var(--text-muted);
 }
 
 .sidebar-list {
@@ -1184,6 +1168,12 @@ html, body {
     text-decoration: none;
 }
 .markdown-body a:hover {
+    text-decoration: underline;
+}
+
+/* Underline: ++text++ renders as <ins> (Markdig Inserted). Force the underline
+   in case a reset strips the browser default. */
+.markdown-body ins {
     text-decoration: underline;
 }
 

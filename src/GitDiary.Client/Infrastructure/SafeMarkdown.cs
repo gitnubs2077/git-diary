@@ -69,13 +69,17 @@ public static class SafeMarkdown
             // inside autolinks. This is what stops <img src=x onerror=alert(1)>.
             .DisableHtml()
             .UseAutoLinks()
-            // Strikethrough (~~text~~) only — the toolbar exposes it. These two
-            // extensions render into a FIXED, attribute-free tag set (<del>, <table>,
-            // <th>, <td>, …). Unlike UseAdvancedExtensions()/GenericAttributes, they
-            // grant no way to inject attributes or raw HTML, so they do not widen the
-            // trust boundary this class defends. The escape guarantee from
-            // DisableHtml() still holds; SafeMarkdownTests pins both facts.
-            .UseEmphasisExtras(Markdig.Extensions.EmphasisExtras.EmphasisExtraOptions.Strikethrough)
+            // Strikethrough (~~text~~ → <del>) and Inserted (++text++ → <ins>, the
+            // toolbar's underline, since Markdown has no native underline and
+            // DisableHtml() escapes raw <u>). These extensions render into a FIXED,
+            // attribute-free tag set (<del>, <ins>, <table>, <th>, <td>, …). Unlike
+            // UseAdvancedExtensions()/GenericAttributes, they grant no way to inject
+            // attributes or raw HTML, so they do not widen the trust boundary this
+            // class defends. The escape guarantee from DisableHtml() still holds;
+            // SafeMarkdownTests pins both facts.
+            .UseEmphasisExtras(
+                Markdig.Extensions.EmphasisExtras.EmphasisExtraOptions.Strikethrough |
+                Markdig.Extensions.EmphasisExtras.EmphasisExtraOptions.Inserted)
             .UsePipeTables()
             // Task lists (- [ ] / - [x]) render as a DISABLED <input type="checkbox">
             // — a fixed, attribute-limited element with no way to inject attributes or
