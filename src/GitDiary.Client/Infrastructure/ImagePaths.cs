@@ -24,32 +24,35 @@ public static class ImagePaths
         @"!\[[^\]]*\]\(\s*([^)\s]+)",
         RegexOptions.Compiled);
 
-    // A committed image blob under a day's assets folder, e.g.
-    // Diary/2026/07/assets/15-ab12cd34.png. This is what the gallery lists out of the
-    // git tree, so it must match the exact layout BuildImagePath produces.
+    // A committed image blob under an assets folder — either a diary day's
+    // (Diary/2026/07/assets/…) or a document's (Docs/assets/…). This is what the
+    // gallery lists out of the git tree, so it must match what BuildImagePath produces
+    // for both entry kinds.
     private static readonly Regex AssetImagePattern = new(
-        $@"^{Regex.Escape(PathHelper.BaseDirectory)}/\d{{4}}/\d{{2}}/assets/[^/]+\.(png|jpe?g|gif|webp|svg|bmp|avif)$",
+        $@"^({Regex.Escape(PathHelper.BaseDirectory)}/\d{{4}}/\d{{2}}|{Regex.Escape(DocPaths.BaseDirectory)})/assets/[^/]+\.(png|jpe?g|gif|webp|svg|bmp|avif)$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    /// <summary>True when <paramref name="path"/> is an image under a day's assets folder.</summary>
+    /// <summary>True when <paramref name="path"/> is an image under a diary-day or document assets folder.</summary>
     public static bool IsAssetImagePath(string? path) =>
         !string.IsNullOrEmpty(path) && AssetImagePattern.IsMatch(path);
 
-    /// <summary>Directory that holds a day's images, e.g. <c>Diary/2026/07/assets</c>.</summary>
-    public static string AssetsDirectory(DateOnly date) =>
-        $"{PathHelper.BaseDirectory}/{date.Year:D4}/{date.Month:D2}/assets";
+    /// <summary>The directory the entry file lives in — <c>Diary/2026/07</c> or <c>Docs</c>.</summary>
+    public static string DirectoryOf(string entryPath)
+    {
+        var slash = entryPath.LastIndexOf('/');
+        return slash > 0 ? entryPath[..slash] : "";
+    }
 
-    /// <summary>Absolute repo path for a new image on <paramref name="date"/>.</summary>
-    public static string BuildImagePath(DateOnly date, string id, string extension) =>
-        $"{AssetsDirectory(date)}/{date.Day:D2}-{id}.{Normalize(extension)}";
+    /// <summary>Assets folder that holds an entry's images, e.g. <c>Diary/2026/07/assets</c> or <c>Docs/assets</c>.</summary>
+    public static string AssetsDirectory(string entryPath) => $"{DirectoryOf(entryPath)}/assets";
 
-    /// <summary>The RELATIVE reference to embed in the day's Markdown.</summary>
-    public static string BuildReference(DateOnly date, string id, string extension) =>
-        $"assets/{date.Day:D2}-{id}.{Normalize(extension)}";
+    /// <summary>Absolute repo path for a new image belonging to <paramref name="entryPath"/>.</summary>
+    public static string BuildImagePath(string entryPath, string fileStem, string extension) =>
+        $"{AssetsDirectory(entryPath)}/{fileStem}.{Normalize(extension)}";
 
-    /// <summary>The directory a day's entry file lives in, e.g. <c>Diary/2026/07</c>.</summary>
-    private static string EntryDirectory(DateOnly date) =>
-        $"{PathHelper.BaseDirectory}/{date.Year:D4}/{date.Month:D2}";
+    /// <summary>The RELATIVE reference to embed in the entry's Markdown (assets is a sibling folder for both kinds).</summary>
+    public static string BuildReference(string fileStem, string extension) =>
+        $"assets/{fileStem}.{Normalize(extension)}";
 
     /// <summary>
     /// Resolves a Markdown image reference to the absolute repo path it points at, or
@@ -57,7 +60,7 @@ public static class ImagePaths
     /// URL (http/https/etc.), a data: URI, or a protocol-relative <c>//host</c> path.
     /// Those are left untouched in the preview.
     /// </summary>
-    public static string? ResolveReference(DateOnly entryDate, string reference)
+    public static string? ResolveReference(string entryPath, string reference)
     {
         if (string.IsNullOrWhiteSpace(reference))
             return null;
@@ -76,7 +79,7 @@ public static class ImagePaths
         // Otherwise resolve against the entry's own directory.
         string combined = reftrimmed.StartsWith('/')
             ? reftrimmed.TrimStart('/')
-            : $"{EntryDirectory(entryDate)}/{reftrimmed}";
+            : $"{DirectoryOf(entryPath)}/{reftrimmed}";
 
         return NormalizePath(combined);
     }

@@ -13,7 +13,29 @@
     @if (DiaryStore.CurrentEntry is not null)
     {
         <div class="editor-toolbar">
-            <span class="editor-date">@DiaryStore.CurrentEntry.Date.ToString("yyyy-MM-dd")</span>
+            @if (DiaryStore.CurrentEntry.Kind == EntryKind.Doc)
+            {
+                @if (_renamingDoc)
+                {
+                    <input class="doc-title-input editor-doc-title-input"
+                           @bind="_renameTitle"
+                           @bind:event="oninput"
+                           @onkeydown="HandleRenameKey"
+                           @onblur="CommitRenameAsync"
+                           @ref="_renameInputRef" />
+                }
+                else
+                {
+                    <button type="button" class="editor-doc-title" @onclick="StartRename" title="@L["docs.rename"]">
+                        <span class="editor-doc-title-text">@DiaryStore.CurrentEntry.Title</span>
+                        <span class="editor-doc-rename-icon" aria-hidden="true">✏️</span>
+                    </button>
+                }
+            }
+            else
+            {
+                <span class="editor-date">@DiaryStore.CurrentEntry.Date.ToString("yyyy-MM-dd")</span>
+            }
             <div class="editor-actions">
                 <button class="btn-save" @onclick="SaveAsync" disabled="@(!DiaryStore.IsDirty)">
                     💾 @L["editor.save"]
@@ -178,6 +200,11 @@
     private ElementReference _previewRef;
     private ElementReference _textareaRef;
     private bool _focusDeleteConfirm;
+    // Inline document-title rename state.
+    private bool _renamingDoc;
+    private string _renameTitle = "";
+    private bool _focusRename;
+    private ElementReference _renameInputRef;
     // Held for the lifetime of the component so the JS paste handler can call back
     // into OnImagePasted. Disposed in Dispose().
     private DotNetObjectReference<DiaryEditor>? _selfRef;
@@ -248,8 +275,48 @@
     // link would 404 for anything the user has typed locally but not committed.
     private string? GitHubFileUrl =>
         DiaryStore.CurrentEntry is { } entry && !string.IsNullOrEmpty(entry.Sha)
-            ? PathHelper.GetGitHubFileUrl(SettingsStore.Config, entry.Date)
+            ? PathHelper.GetGitHubFileUrlForPath(SettingsStore.Config, entry.Path)
             : null;
+
+    // --- Document title rename ----------------------------------------------
+
+    private void StartRename()
+    {
+        if (DiaryStore.CurrentEntry is not { Kind: EntryKind.Doc } entry) return;
+        _renameTitle = entry.Title;
+        _renamingDoc = true;
+        _focusRename = true;
+    }
+
+    private async Task CommitRenameAsync()
+    {
+        if (!_renamingDoc) return;
+        _renamingDoc = false;
+
+        var newTitle = _renameTitle.Trim();
+        // Empty or unchanged title → silently keep the current name.
+        if (string.IsNullOrEmpty(newTitle) ||
+            DiaryStore.CurrentEntry is not { Kind: EntryKind.Doc } entry ||
+            newTitle == entry.Title)
+        {
+            return;
+        }
+
+        await DiaryStore.RenameCurrentDocAsync(newTitle);
+    }
+
+    private async Task HandleRenameKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CommitRenameAsync();
+        }
+        else if (e.Key == "Escape")
+        {
+            // Abandon the edit without renaming.
+            _renamingDoc = false;
+        }
+    }
 
     protected override void OnInitialized()
     {
@@ -412,7 +479,7 @@
         string markdown;
         try
         {
-            markdown = await Images.AttachAsync(DiaryStore.CurrentEntry.Date, mime, base64, name);
+            markdown = await Images.AttachAsync(DiaryStore.CurrentEntry, mime, base64, name);
         }
         catch (Exception ex)
         {
@@ -609,6 +676,19 @@
             }
         }
 
+        if (_focusRename && _renamingDoc)
+        {
+            _focusRename = false;
+            try
+            {
+                await _renameInputRef.FocusAsync();
+            }
+            catch
+            {
+                // Element not yet in DOM — safe to skip.
+            }
+        }
+
         await UpdatePreviewAsync();
     }
 
@@ -717,7 +797,7 @@
         var matches = ImgSrcRegex.Matches(html);
         if (matches.Count == 0) return html;
 
-        var date = DiaryStore.CurrentEntry.Date;
+        var entryPath = DiaryStore.CurrentEntry.Path;
         var replacements = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (Match m in matches)
         {
@@ -727,7 +807,7 @@
             string? dataUrl;
             try
             {
-                dataUrl = await Images.ResolveToDataUrlAsync(date, WebUtility.HtmlDecode(src));
+                dataUrl = await Images.ResolveToDataUrlAsync(entryPath, WebUtility.HtmlDecode(src));
             }
             catch (Exception ex)
             {

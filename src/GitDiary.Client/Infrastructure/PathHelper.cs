@@ -105,10 +105,17 @@ public static class PathHelper
     /// view. Returns <c>null</c> when required config is missing.
     /// </summary>
     public static string? GetGitHubFileUrl(RepositoryConfig? config, DateOnly date)
+        => GetGitHubFileUrlForPath(config, GetPath(date));
+
+    /// <summary>
+    /// Builds the browser URL for an arbitrary repo file path on github.com
+    /// (diary or document). Returns <c>null</c> when required config is missing.
+    /// </summary>
+    public static string? GetGitHubFileUrlForPath(RepositoryConfig? config, string path)
     {
         var repoUrl = GetGitHubRepoUrl(config);
-        if (repoUrl is null) return null;
+        if (repoUrl is null || string.IsNullOrEmpty(path)) return null;
         var branch = string.IsNullOrEmpty(config!.Branch) ? "main" : config.Branch;
-        return $"{repoUrl}/blob/{branch}/{GetPath(date)}";
+        return $"{repoUrl}/blob/{branch}/{path}";
     }
 }

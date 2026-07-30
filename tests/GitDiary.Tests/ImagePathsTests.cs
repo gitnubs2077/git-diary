@@ -12,28 +12,35 @@ namespace GitDiary.Tests;
 /// </summary>
 public class ImagePathsTests
 {
-    private static readonly DateOnly Day = new(2026, 7, 15);
+    private const string DiaryPath = "Diary/2026/07/15.md";
+    private const string DocPath = "Docs/20260725-143005-note.md";
 
     [Fact]
-    public void BuildImagePath_PlacesImageUnderDayAssetsFolder()
+    public void BuildImagePath_PlacesImageInTheEntrysAssetsFolder()
     {
+        // Diary: assets sit beside the day's file, under Diary/YYYY/MM/assets.
         Assert.Equal("Diary/2026/07/assets/15-abc123.png",
-            ImagePaths.BuildImagePath(Day, "abc123", "png"));
+            ImagePaths.BuildImagePath(DiaryPath, "15-abc123", "png"));
+        // Document: assets sit beside the doc, under Docs/assets.
+        Assert.Equal("Docs/assets/25-abc123.png",
+            ImagePaths.BuildImagePath(DocPath, "25-abc123", "png"));
     }
 
     [Fact]
-    public void BuildReference_IsRelativeToTheEntryFile()
+    public void BuildReference_IsAlwaysRelativeToTheEntryFile()
     {
-        Assert.Equal("assets/15-abc123.png", ImagePaths.BuildReference(Day, "abc123", "png"));
+        Assert.Equal("assets/15-abc123.png", ImagePaths.BuildReference("15-abc123", "png"));
     }
 
     [Fact]
     public void AttachThenResolve_RoundTripsToTheSameRepoPath()
     {
-        var repoPath = ImagePaths.BuildImagePath(Day, "abc123", "jpg");
-        var reference = ImagePaths.BuildReference(Day, "abc123", "jpg");
-
-        Assert.Equal(repoPath, ImagePaths.ResolveReference(Day, reference));
+        foreach (var entryPath in new[] { DiaryPath, DocPath })
+        {
+            var repoPath = ImagePaths.BuildImagePath(entryPath, "01-abc123", "jpg");
+            var reference = ImagePaths.BuildReference("01-abc123", "jpg");
+            Assert.Equal(repoPath, ImagePaths.ResolveReference(entryPath, reference));
+        }
     }
 
     [Fact]
@@ -41,14 +48,14 @@ public class ImagePathsTests
     {
         // A relative "../.." reference climbs out of the entry dir back to Diary root.
         Assert.Equal("Diary/other/x.png",
-            ImagePaths.ResolveReference(Day, "../../other/x.png"));
+            ImagePaths.ResolveReference(DiaryPath, "../../other/x.png"));
     }
 
     [Fact]
     public void Resolve_RootRelativeIsRepoRootRelative()
     {
         Assert.Equal("Diary/2026/07/assets/x.png",
-            ImagePaths.ResolveReference(Day, "/Diary/2026/07/assets/x.png"));
+            ImagePaths.ResolveReference(DiaryPath, "/Diary/2026/07/assets/x.png"));
     }
 
     [Theory]
@@ -59,7 +66,7 @@ public class ImagePathsTests
     public void Resolve_ReturnsNullForExternalUrls(string reference)
     {
         // External / inline references are not ours to fetch — the preview leaves them be.
-        Assert.Null(ImagePaths.ResolveReference(Day, reference));
+        Assert.Null(ImagePaths.ResolveReference(DiaryPath, reference));
     }
 
     [Fact]
@@ -104,13 +111,16 @@ public class ImagePathsTests
     [InlineData("Diary/2026/07/assets/15-ab12cd34.png", true)]
     [InlineData("Diary/2026/07/assets/15-ab12cd34.JPG", true)]   // case-insensitive
     [InlineData("Diary/2026/12/assets/01-x.webp", true)]
+    [InlineData("Docs/assets/25-ab12cd34.png", true)]            // document images too
+    [InlineData("Docs/assets/x.webp", true)]
     [InlineData("Diary/2026/07/15.md", false)]                   // an entry, not an image
+    [InlineData("Docs/20260725-143005-note.md", false)]          // a document, not an image
     [InlineData("Diary/2026/07/assets/notes.txt", false)]        // non-image in assets
     [InlineData("Diary/2026/07/assets/sub/deep.png", false)]     // nested past assets/
-    [InlineData("other/2026/07/assets/15-x.png", false)]         // outside the diary root
+    [InlineData("other/2026/07/assets/15-x.png", false)]         // outside known roots
     [InlineData("Diary/assets/x.png", false)]                    // not the YYYY/MM layout
     [InlineData("", false)]
-    public void IsAssetImagePath_MatchesOnlyDayAssetImages(string path, bool expected)
+    public void IsAssetImagePath_MatchesOnlyAssetImages(string path, bool expected)
     {
         Assert.Equal(expected, ImagePaths.IsAssetImagePath(path));
     }
@@ -118,10 +128,9 @@ public class ImagePathsTests
     [Fact]
     public void IsAssetImagePath_MatchesWhatBuildImagePathProduces()
     {
-        // The gallery filter and the writer must agree, or uploaded images vanish
-        // from the gallery.
-        var produced = ImagePaths.BuildImagePath(Day, "ab12cd34", "png");
-        Assert.True(ImagePaths.IsAssetImagePath(produced));
+        // The gallery filter and the writer must agree, or uploaded images vanish.
+        Assert.True(ImagePaths.IsAssetImagePath(ImagePaths.BuildImagePath(DiaryPath, "15-ab12cd34", "png")));
+        Assert.True(ImagePaths.IsAssetImagePath(ImagePaths.BuildImagePath(DocPath, "25-ab12cd34", "png")));
     }
 
     // --- Security: MIME / extension sanitizing ---------------------------------

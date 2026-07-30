@@ -13,6 +13,7 @@ public sealed class DiaryStore : StoreBase
 
     private DiaryEntry? _currentEntry;
     private List<DiaryEntryInfo> _entries = new();
+    private List<DiaryEntryInfo> _docs = new();
     private bool _isLoading;
     private string _currentContent = "";
     private bool _isDirty;
@@ -34,6 +35,17 @@ public sealed class DiaryStore : StoreBase
         private set
         {
             _entries = value;
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>Document listing (the "文档" section), newest created first.</summary>
+    public List<DiaryEntryInfo> Docs
+    {
+        get => _docs;
+        private set
+        {
+            _docs = value;
             NotifyStateChanged();
         }
     }
@@ -289,7 +301,7 @@ public sealed class DiaryStore : StoreBase
             // the extra GitHub GET in that case.
             if (wasNewFile)
             {
-                await RefreshEntriesAsync();
+                await RefreshListForKindAsync(CurrentEntry.Kind);
             }
         }
         else
@@ -319,6 +331,7 @@ public sealed class DiaryStore : StoreBase
         if (CurrentEntry == null) return Result<bool>.Success(true);
 
         var path = CurrentEntry.Path;
+        var kind = CurrentEntry.Kind;
         var result = await _diaryRepo.DeleteAsync(CurrentEntry);
         if (result.IsFailure)
         {
@@ -336,9 +349,9 @@ public sealed class DiaryStore : StoreBase
         IsDirty = false;
         SyncState = SyncState.Synced;
 
-        // Drop the deleted date from the sidebar tree so it disappears immediately
-        // instead of reappearing until the next tree fetch.
-        await RefreshEntriesAsync();
+        // Drop the deleted row from the sidebar so it disappears immediately instead of
+        // reappearing until the next tree fetch (diary tree or doc list, per kind).
+        await RefreshListForKindAsync(kind);
         return Result<bool>.Success(true);
     }
 
@@ -355,6 +368,7 @@ public sealed class DiaryStore : StoreBase
     {
         CurrentEntry = null;
         Entries = new List<DiaryEntryInfo>();
+        Docs = new List<DiaryEntryInfo>();
         CurrentContent = "";
         IsDirty = false;
         IsLoading = false;
@@ -376,6 +390,165 @@ public sealed class DiaryStore : StoreBase
         }
     }
 
+    private Task RefreshListForKindAsync(EntryKind kind) =>
+        kind == EntryKind.Doc ? RefreshDocsAsync() : RefreshEntriesAsync();
+
+    /// <summary>
+    /// Refresh the document list: committed docs from the tree, plus any documents that
+    /// exist only as a local draft (created but not yet committed) so they don't vanish
+    /// from the sidebar — a new doc has no other way to be reached.
+    /// </summary>
+    public async Task RefreshDocsAsync()
+    {
+        var result = await _diaryRepo.GetAllDocsAsync();
+
+        // On a failed tree fetch (offline / rejected token) don't blank the list:
+        // keep the committed docs we already had and still merge local drafts below,
+        // so a just-created uncommitted doc never vanishes just because GitHub is
+        // unreachable. Mirrors RefreshEntriesAsync, which leaves Entries intact on error.
+        List<DiaryEntryInfo> docs;
+        if (result.IsFailure)
+        {
+            SetLoadError(result.Error, result.StatusCode);
+            docs = _docs.Where(d => !string.IsNullOrEmpty(d.Sha)).ToList();
+        }
+        else
+        {
+            SetLoadError(null, null);
+            docs = result.Value!;
+        }
+
+        var committed = docs.Select(d => d.Path).ToHashSet(StringComparer.Ordinal);
+        try
+        {
+            foreach (var draft in await _indexedDb.GetAllDraftsAsync())
+            {
+                if (DocPaths.IsDocPath(draft.Path) && committed.Add(draft.Path))
+                {
+                    var createdAt = DocPaths.ParseCreatedAt(draft.Path) ?? DateTimeOffset.MinValue;
+                    docs.Add(new DiaryEntryInfo
+                    {
+                        Kind = EntryKind.Doc, Path = draft.Path, Sha = "", Exists = false,
+                        Title = DocPaths.ParseTitle(draft.Path), CreatedAt = createdAt,
+                        Date = DateOnly.FromDateTime(createdAt.LocalDateTime),
+                    });
+                }
+            }
+        }
+        catch { /* drafts unavailable — show committed only */ }
+
+        Docs = docs.OrderByDescending(d => d.Path, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>Load a document into the editor (mirrors LoadEntryAsync for diary).</summary>
+    public async Task LoadDocAsync(string path)
+    {
+        IsLoading = true;
+        var result = await _diaryRepo.LoadDocAsync(path);
+        if (result.IsSuccess)
+        {
+            var entry = result.Value!;
+            var draft = await _indexedDb.LoadDraftAsync(entry.Path);
+            if (draft != null && !string.IsNullOrEmpty(draft.Content))
+            {
+                entry.Content = draft.Content;
+                entry.SyncState = draft.State;
+            }
+            CurrentEntry = entry;
+            CurrentContent = entry.Content;
+            SyncState = entry.SyncState;
+            IsDirty = false;
+            SetLoadError(null, null);
+        }
+        else
+        {
+            SetLoadError(result.Error, result.StatusCode);
+        }
+        IsLoading = false;
+    }
+
+    /// <summary>
+    /// Start a NEW document with the given title: build its path/content, open it in the
+    /// editor as an uncommitted draft, and surface it at the top of the doc list. It is
+    /// written to GitHub on the next commit.
+    /// </summary>
+    public async Task CreateDocAsync(string title)
+    {
+        var createdAt = DateTimeOffset.Now;
+        var path = DocPaths.BuildPath(createdAt, title);
+        var displayTitle = DocPaths.ParseTitle(path);
+
+        var entry = new DiaryEntry
+        {
+            Kind = EntryKind.Doc, Path = path, Title = displayTitle, CreatedAt = createdAt,
+            Date = DateOnly.FromDateTime(createdAt.LocalDateTime),
+            Content = $"# {displayTitle}\n\n", Sha = "", SyncState = SyncState.Pending,
+        };
+
+        CurrentEntry = entry;
+        CurrentContent = entry.Content;
+        SyncState = SyncState.Pending;
+        IsDirty = true;
+
+        await _indexedDb.SaveDraftAsync(new Draft
+        {
+            Path = path, Content = entry.Content, Sha = "",
+            State = SyncState.Pending, UpdatedAt = createdAt
+        });
+
+        await RefreshDocsAsync();
+    }
+
+    /// <summary>
+    /// Rename the current document (its title → its filename). Not-yet-committed docs are
+    /// renamed in place; committed docs are moved on GitHub (create the new file, delete
+    /// the old). Images resolve via a shared Docs/assets folder, so they survive the move.
+    /// No-op for diary or an unchanged title.
+    /// </summary>
+    public async Task<Result<bool>> RenameCurrentDocAsync(string newTitle)
+    {
+        if (CurrentEntry is null || CurrentEntry.Kind != EntryKind.Doc)
+            return Result<bool>.Success(true);
+
+        var oldPath = CurrentEntry.Path;
+        var newPath = DocPaths.RenamePath(oldPath, newTitle);
+        if (newPath is null || newPath == oldPath)
+            return Result<bool>.Success(true);
+
+        var content = CurrentContent;
+        CurrentEntry.Content = content;
+
+        if (string.IsNullOrEmpty(CurrentEntry.Sha))
+        {
+            await _indexedDb.RemoveDraftAsync(oldPath);
+            CurrentEntry.Path = newPath;
+            CurrentEntry.Title = DocPaths.ParseTitle(newPath);
+            await _indexedDb.SaveDraftAsync(new Draft
+            {
+                Path = newPath, Content = content, Sha = "",
+                State = CurrentEntry.SyncState, UpdatedAt = DateTimeOffset.Now
+            });
+            NotifyStateChanged();
+            await RefreshDocsAsync();
+            return Result<bool>.Success(true);
+        }
+
+        var created = new DiaryEntry { Path = newPath, Content = content, Sha = "" };
+        var createResult = await _diaryRepo.SaveAsync(created);
+        if (createResult.IsFailure)
+            return createResult;
+
+        await _diaryRepo.DeleteAsync(new DiaryEntry { Path = oldPath, Sha = CurrentEntry.Sha });
+        await _indexedDb.RemoveDraftAsync(oldPath);
+
+        CurrentEntry.Path = newPath;
+        CurrentEntry.Sha = created.Sha;
+        CurrentEntry.Title = DocPaths.ParseTitle(newPath);
+        NotifyStateChanged();
+        await RefreshDocsAsync();
+        return Result<bool>.Success(true);
+    }
+
     public async Task BuildSearchIndexAsync()
     {
         // Fingerprint the entry set — path + SHA per row. If nothing on the
@@ -383,7 +556,7 @@ public sealed class DiaryStore : StoreBase
         // existing SearchService index instead of re-downloading N files.
         // This is what turns "Search on a 300-entry repo" from a 30-second
         // wait into an instant hit on repeat queries.
-        var fingerprint = ComputeEntryFingerprint(_entries);
+        var fingerprint = ComputeEntryFingerprint(_entries) + "||" + ComputeEntryFingerprint(_docs);
         if (fingerprint == _searchIndexFingerprint) return;
 
         var entries = new List<DiaryEntry>();
@@ -391,9 +564,14 @@ public sealed class DiaryStore : StoreBase
         {
             var result = await _diaryRepo.LoadAsync(info.Date);
             if (result.IsSuccess && result.Value != null)
-            {
                 entries.Add(result.Value);
-            }
+        }
+        // Unified search: documents are indexed alongside diary entries.
+        foreach (var info in _docs)
+        {
+            var result = await _diaryRepo.LoadDocAsync(info.Path);
+            if (result.IsSuccess && result.Value != null)
+                entries.Add(result.Value);
         }
         _searchService.BuildIndex(entries);
         _searchIndexFingerprint = fingerprint;

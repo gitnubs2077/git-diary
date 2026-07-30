@@ -49,7 +49,7 @@ public sealed class ImageService
     /// Store a picked/pasted image locally (pending commit) and return the Markdown
     /// image snippet to insert at the caret, e.g. <c>![photo](assets/15-ab12cd34.png)</c>.
     /// </summary>
-    public async Task<string> AttachAsync(DateOnly date, string mime, string base64, string? originalName)
+    public async Task<string> AttachAsync(DiaryEntry entry, string mime, string base64, string? originalName)
     {
         var ext = ImagePaths.ExtensionForMime(mime);
         if (ext == "bin")
@@ -64,9 +64,12 @@ public sealed class ImageService
         // that the preview injects as innerHTML. Whitelist it (see ImagePaths.SafeMime).
         var effectiveMime = ImagePaths.SafeMime(mime, ext);
 
-        var id = Guid.NewGuid().ToString("N")[..8];
-        var repoPath = ImagePaths.BuildImagePath(date, id, ext);
-        var reference = ImagePaths.BuildReference(date, id, ext);
+        // The image lives in an assets/ folder next to the entry's own .md — which is
+        // Diary/YYYY/MM/assets for a diary day or Docs/assets for a document. The DD
+        // prefix keeps a stable, human-scannable order within a diary month's assets.
+        var fileStem = $"{entry.Date.Day:D2}-{Guid.NewGuid():N}"[..11];
+        var repoPath = ImagePaths.BuildImagePath(entry.Path, fileStem, ext);
+        var reference = ImagePaths.BuildReference(fileStem, ext);
 
         var envelope = JsonSerializer.Serialize(new StoredImage(effectiveMime, base64));
         var payload = _vault.IsUnlocked ? await _vault.EncryptStringAsync(envelope) : envelope;
@@ -82,9 +85,9 @@ public sealed class ImageService
     /// Resolve a Markdown image reference to a <c>data:</c> URL for the preview, or
     /// null to leave it untouched (external URL, or the image can't be found).
     /// </summary>
-    public async Task<string?> ResolveToDataUrlAsync(DateOnly entryDate, string reference)
+    public async Task<string?> ResolveToDataUrlAsync(string entryPath, string reference)
     {
-        var abs = ImagePaths.ResolveReference(entryDate, reference);
+        var abs = ImagePaths.ResolveReference(entryPath, reference);
         if (abs is null) return null;
         return await ResolveAbsoluteAsync(abs);
     }
@@ -186,7 +189,7 @@ public sealed class ImageService
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var reference in ImagePaths.ExtractImageReferences(entry.Content))
         {
-            var abs = ImagePaths.ResolveReference(entry.Date, reference);
+            var abs = ImagePaths.ResolveReference(entry.Path, reference);
             if (abs is null || !seen.Add(abs)) continue;
 
             var pending = await LoadPendingAsync(abs);

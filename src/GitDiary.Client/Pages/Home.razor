@@ -42,7 +42,12 @@ else
                 OnSettingsClicked="OpenSettings"
                 ShowLock="Vault.IsUnlocked"
                 OnLockClicked="LockApp"
-                OnGalleryClicked="OpenGallery" />
+                OnGalleryClicked="OpenGallery"
+                Section="_section"
+                OnSectionChanged="OnSectionChanged"
+                SelectedPath="@(DiaryStore.CurrentEntry?.Path)"
+                OnDocSelected="OnDocSelected"
+                OnNewDocClicked="OnNewDocClicked" />
         </div>
         <div class="app-resizer" @ref="_resizerRef" title="@L["home.resizerTooltip"]"></div>
         <div class="app-main">
@@ -60,7 +65,7 @@ else
                 </div>
             }
             <div class="app-toolbar">
-                <SearchBox OnEntrySelected="OnEntrySelected" />
+                <SearchBox OnEntrySelected="OnEntrySelected" OnDocSelected="OnDocSelected" />
             </div>
             <div class="app-editor">
                 <DiaryEditor />
@@ -74,6 +79,28 @@ else
     @if (_showGallery)
     {
         <ImageGallery OnClose="CloseGallery" />
+    }
+
+    @if (_showNewDocDialog)
+    {
+        <div class="modal-overlay" @onclick="CancelNewDoc">
+            <div class="modal-dialog" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+                <div class="modal-content">
+                    <h3>@L["docs.newTitle"]</h3>
+                    <input class="doc-title-input"
+                           type="text"
+                           placeholder="@L["docs.titlePlaceholder"]"
+                           @bind="_newDocTitle"
+                           @bind:event="oninput"
+                           @onkeydown="HandleNewDocKey"
+                           @ref="_newDocInputRef" />
+                    <div class="modal-actions">
+                        <button class="btn-cancel" @onclick="CancelNewDoc">@L["editor.cancel"]</button>
+                        <button class="btn-doc-create" @onclick="ConfirmNewDoc" disabled="@_newDocInFlight">@L["docs.create"]</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     }
 }
 
@@ -107,6 +134,14 @@ else
     private DateOnly? CurrentDate { get; set; }
     private bool ShowSettings { get; set; }
     private bool _showGallery;
+
+    // Active top-level section (日记 vs 文档) + the "new document" dialog.
+    private EntryKind _section = EntryKind.Diary;
+    private bool _showNewDocDialog;
+    private string _newDocTitle = "";
+    private bool _newDocInFlight;
+    private bool _focusNewDoc;
+    private ElementReference _newDocInputRef;
     // True when a password vault exists but hasn't been unlocked this session. Gates
     // the entire app behind <LockScreen> — config isn't even decrypted until unlock.
     private bool _needsUnlock;
@@ -136,6 +171,12 @@ else
     // own inputs actually change.
     private string? _lastRenderedLoadError;
     private bool _lastRenderedLoadErrorIsAuth;
+    // Also shadow the open entry's path so Home re-renders when the *identity* of the
+    // current entry changes (load / create / rename / delete) — that path feeds
+    // <Sidebar SelectedPath>, and a rename fired from DiaryEditor would otherwise leave
+    // Home's binding stale, dropping the doc's selection highlight. Path never changes
+    // on a keystroke, so this keeps the per-keystroke re-render throttle intact.
+    private string? _lastRenderedCurrentPath;
 
     protected override async Task OnInitializedAsync()
     {
@@ -152,10 +193,12 @@ else
             // Re-render Home only when the load-error banner's inputs change — not on
             // every keystroke-driven StateChanged.
             if (_lastRenderedLoadError != DiaryStore.LoadError ||
-                _lastRenderedLoadErrorIsAuth != DiaryStore.LoadErrorIsAuth)
+                _lastRenderedLoadErrorIsAuth != DiaryStore.LoadErrorIsAuth ||
+                _lastRenderedCurrentPath != DiaryStore.CurrentEntry?.Path)
             {
                 _lastRenderedLoadError = DiaryStore.LoadError;
                 _lastRenderedLoadErrorIsAuth = DiaryStore.LoadErrorIsAuth;
+                _lastRenderedCurrentPath = DiaryStore.CurrentEntry?.Path;
                 _ = InvokeAsync(StateHasChanged);
             }
         };
@@ -218,7 +261,18 @@ else
         GitHubApi.SetToken(config.Token);
         SettingsStore.SetConfig(config);
 
+        try
+        {
+            var saved = await JsRuntime.InvokeAsync<string?>("localStorage.getItem", "gitdiary_section");
+            _section = saved == "doc" ? EntryKind.Doc : EntryKind.Diary;
+        }
+        catch { /* localStorage unavailable — default to the diary section */ }
+
         await DiaryStore.RefreshEntriesAsync();
+        if (_section == EntryKind.Doc) await DiaryStore.RefreshDocsAsync();
+        // Boot always opens on today's diary entry; the section tab just governs which
+        // list the sidebar shows. (Restoring the last-open doc would need its path
+        // persisted too — deliberately out of scope.)
         await OnEntrySelected(PathHelper.GetToday());
 
         // Attach the browser `online` listener and try to flush any drafts that were
@@ -242,6 +296,59 @@ else
         // arrow-key navigation the way it does a click.
         StateHasChanged();
         await DiaryStore.LoadEntryAsync(date);
+    }
+
+    // --- Documents section ---------------------------------------------------
+
+    private async Task OnSectionChanged(EntryKind kind)
+    {
+        if (_section == kind) return;
+        _section = kind;
+        try { await JsRuntime.InvokeVoidAsync("localStorage.setItem", "gitdiary_section", kind == EntryKind.Doc ? "doc" : "diary"); }
+        catch { /* localStorage unavailable — section just won't persist */ }
+
+        if (kind == EntryKind.Doc) await DiaryStore.RefreshDocsAsync();
+        else await DiaryStore.RefreshEntriesAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnDocSelected(string path)
+    {
+        _section = EntryKind.Doc;
+        StateHasChanged();
+        await DiaryStore.LoadDocAsync(path);
+    }
+
+    private void OnNewDocClicked()
+    {
+        _newDocTitle = "";
+        _newDocInFlight = false;
+        _showNewDocDialog = true;
+        _focusNewDoc = true;
+    }
+
+    private void CancelNewDoc() => _showNewDocDialog = false;
+
+    private async Task ConfirmNewDoc()
+    {
+        if (_newDocInFlight) return;
+        _newDocInFlight = true;
+        try
+        {
+            _section = EntryKind.Doc;
+            await DiaryStore.CreateDocAsync(_newDocTitle.Trim());
+            _showNewDocDialog = false;
+        }
+        finally
+        {
+            _newDocInFlight = false;
+        }
+    }
+
+    private async Task HandleNewDocKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ConfirmNewDoc();
+        else if (e.Key == "Escape") CancelNewDoc();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -313,6 +420,14 @@ else
         {
             _resizerAttached = false;
         }
+
+        // Autofocus the title field the first render after the new-doc dialog opens.
+        if (_focusNewDoc)
+        {
+            _focusNewDoc = false;
+            try { await _newDocInputRef.FocusAsync(); }
+            catch { /* element not in DOM yet — user can still click it */ }
+        }
     }
 
     /// <summary>
@@ -378,12 +493,35 @@ else
 
     private async Task ShiftDayAsync(int direction)
     {
+        // When a document is open, arrow keys walk the document list instead of days.
+        if (DiaryStore.CurrentEntry?.Kind == EntryKind.Doc)
+        {
+            await ShiftDocAsync(direction);
+            return;
+        }
+
         if (CurrentDate is null) return;
         // Jump to the nearest day that actually has an entry, skipping empty days.
         var target = EntryNavigation.FindAdjacent(
             DiaryStore.Entries.Select(e => e.Date), CurrentDate.Value, direction);
         if (target is null) return;
         await OnEntrySelected(target.Value);
+    }
+
+    // Docs are ordered newest-first in the list. "Newer" (direction +1) moves up the
+    // list toward index 0; "older" (-1) moves down. Stops at either end.
+    private async Task ShiftDocAsync(int direction)
+    {
+        var docs = DiaryStore.Docs;
+        if (docs.Count == 0) return;
+
+        var currentPath = DiaryStore.CurrentEntry?.Path;
+        var idx = docs.FindIndex(d => d.Path == currentPath);
+        if (idx < 0) return;
+
+        var targetIdx = idx - direction;
+        if (targetIdx < 0 || targetIdx >= docs.Count) return;
+        await OnDocSelected(docs[targetIdx].Path);
     }
 
     // Ctrl+L, or the sidebar lock button → return to the lock screen. Only meaningful

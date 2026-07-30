@@ -44,6 +44,64 @@ public sealed class DiaryRepository
         });
     }
 
+    /// <summary>Load a document by its repo path. A path we know about (from a draft)
+    /// but that isn't on GitHub yet maps to a blank success entry, same as diary.</summary>
+    public async Task<Result<DiaryEntry>> LoadDocAsync(string path)
+    {
+        var title = DocPaths.ParseTitle(path);
+        var createdAt = DocPaths.ParseCreatedAt(path) ?? DateTimeOffset.Now;
+        var day = DateOnly.FromDateTime(createdAt.LocalDateTime);
+
+        var result = await _gitHubApi.GetFileContentAsync(path);
+        if (result.IsFailure && result.Error == "NOT_FOUND")
+        {
+            return Result<DiaryEntry>.Success(new DiaryEntry
+            {
+                Kind = EntryKind.Doc, Path = path, Title = title, CreatedAt = createdAt, Date = day,
+                Content = $"# {title}\n\n", Sha = "", SyncState = SyncState.Synced
+            });
+        }
+        if (result.IsFailure)
+            return Result<DiaryEntry>.Failure(result.Error!, result.StatusCode);
+
+        var payload = result.Value!;
+        return Result<DiaryEntry>.Success(new DiaryEntry
+        {
+            Kind = EntryKind.Doc, Path = path, Title = title, CreatedAt = createdAt, Date = day,
+            Content = payload.Content, Sha = payload.Sha, SyncState = SyncState.Synced
+        });
+    }
+
+    /// <summary>List every committed document, newest first (the created-timestamp
+    /// filename prefix means a reverse path sort is chronological).</summary>
+    public async Task<Result<List<DiaryEntryInfo>>> GetAllDocsAsync()
+    {
+        var treeResult = await _gitHubApi.GetTreeAsync();
+        if (treeResult.IsFailure)
+            return Result<List<DiaryEntryInfo>>.Failure(treeResult.Error!, treeResult.StatusCode);
+
+        var infos = new List<DiaryEntryInfo>();
+        foreach (var node in treeResult.Value!)
+        {
+            if (node.Type == "blob" && DocPaths.IsDocPath(node.Path))
+            {
+                var createdAt = DocPaths.ParseCreatedAt(node.Path) ?? DateTimeOffset.MinValue;
+                infos.Add(new DiaryEntryInfo
+                {
+                    Kind = EntryKind.Doc,
+                    Path = node.Path,
+                    Sha = node.Sha,
+                    Exists = true,
+                    Title = DocPaths.ParseTitle(node.Path),
+                    CreatedAt = createdAt,
+                    Date = DateOnly.FromDateTime(createdAt.LocalDateTime),
+                });
+            }
+        }
+        return Result<List<DiaryEntryInfo>>.Success(
+            infos.OrderByDescending(i => i.Path, StringComparer.Ordinal).ToList());
+    }
+
     public async Task<Result<bool>> SaveAsync(DiaryEntry entry)
     {
         if (string.IsNullOrEmpty(entry.Sha))

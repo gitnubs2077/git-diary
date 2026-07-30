@@ -68,11 +68,29 @@
                 <button class="btn-icon" @onclick="Lock" title="@L["sidebar.lock"]" aria-label="@L["sidebar.lock"]">🔒</button>
             }
             <button class="btn-icon" @onclick="OpenSettings" title="@L["sidebar.settings"]">⚙️</button>
-            <button class="btn-new" @onclick="CreateTodayEntry">@L["sidebar.newToday"]</button>
+            @if (Section == EntryKind.Doc)
+            {
+                <button class="btn-new" @onclick="NewDoc">@L["sidebar.newDoc"]</button>
+            }
+            else
+            {
+                <button class="btn-new" @onclick="CreateTodayEntry">@L["sidebar.newToday"]</button>
+            }
         </div>
     </div>
 
+    <div class="section-tabs" role="tablist" aria-label="@L["section.aria"]">
+        <button type="button" class="section-tab @(Section == EntryKind.Diary ? "active" : "")"
+                role="tab" aria-selected="@(Section == EntryKind.Diary ? "true" : "false")"
+                @onclick="() => SwitchSection(EntryKind.Diary)">📔 @L["section.diary"]</button>
+        <button type="button" class="section-tab @(Section == EntryKind.Doc ? "active" : "")"
+                role="tab" aria-selected="@(Section == EntryKind.Doc ? "true" : "false")"
+                @onclick="() => SwitchSection(EntryKind.Doc)">📄 @L["section.docs"]</button>
+    </div>
+
     <div class="sidebar-list">
+        @if (Section == EntryKind.Diary)
+        {
         @if (GroupedEntries is not null)
         {
             @foreach (var yearGroup in GroupedEntries)
@@ -140,6 +158,35 @@
         {
             <div class="sidebar-empty">@L["sidebar.empty"]</div>
         }
+        }
+        else
+        {
+            @if (DiaryStore.Docs.Count > 0)
+            {
+                @foreach (var doc in DiaryStore.Docs)
+                {
+                    <div class="doc-item @(IsDocSelected(doc.Path) ? "selected" : "")"
+                         role="button"
+                         tabindex="0"
+                         aria-current="@(IsDocSelected(doc.Path) ? "true" : "false")"
+                         @onclick="() => SelectDoc(doc.Path)"
+                         @onkeydown="e => OnActivateKey(e, () => SelectDoc(doc.Path))">
+                        <div class="doc-title">@doc.Title</div>
+                        <div class="doc-meta">
+                            <span>@doc.CreatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</span>
+                            @if (string.IsNullOrEmpty(doc.Sha))
+                            {
+                                <span class="doc-uncommitted" title="@L["docs.uncommitted"]">•</span>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="sidebar-empty">@L["docs.empty"]</div>
+            }
+        }
     </div>
 </div>
 
@@ -174,6 +221,23 @@
 
     [Parameter]
     public EventCallback OnGalleryClicked { get; set; }
+
+    // --- Documents section ---
+    [Parameter]
+    public EntryKind Section { get; set; } = EntryKind.Diary;
+
+    [Parameter]
+    public EventCallback<EntryKind> OnSectionChanged { get; set; }
+
+    /// <summary>Path of the currently-open entry — used to highlight the selected doc.</summary>
+    [Parameter]
+    public string? SelectedPath { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnDocSelected { get; set; }
+
+    [Parameter]
+    public EventCallback OnNewDocClicked { get; set; }
 
     private HashSet<int> ExpandedYears { get; set; } = new();
     // Key on (year, month) — using just the month number would collide across years
@@ -329,6 +393,18 @@
         SelectedDate = today;
         await DiaryStore.LoadEntryAsync(today);
     }
+
+    private async Task SwitchSection(EntryKind kind)
+    {
+        if (Section == kind) return;
+        await OnSectionChanged.InvokeAsync(kind);
+    }
+
+    private async Task SelectDoc(string path) => await OnDocSelected.InvokeAsync(path);
+
+    private async Task NewDoc() => await OnNewDocClicked.InvokeAsync();
+
+    private bool IsDocSelected(string path) => SelectedPath == path;
 
     private async Task Lock()
     {

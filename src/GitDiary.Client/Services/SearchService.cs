@@ -29,7 +29,9 @@ public sealed class SearchService
 
         foreach (var entry in _index.Values)
         {
-            var title = PathHelper.GetTitle(entry.Date);
+            var title = entry.Kind == EntryKind.Doc
+                ? entry.Title
+                : PathHelper.GetTitle(entry.Date);
 
             if (title.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
                 entry.Content.Contains(keyword, StringComparison.OrdinalIgnoreCase))
@@ -38,7 +40,9 @@ public sealed class SearchService
             }
         }
 
-        return results.OrderByDescending(e => e.Date).ToList();
+        // Newest first; documents and diary days interleave by their date/created day.
+        return results.OrderByDescending(e => e.Kind == EntryKind.Doc ? e.CreatedAt : new DateTimeOffset(e.Date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero))
+            .ToList();
     }
 
     public void Clear()

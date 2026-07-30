@@ -28,9 +28,18 @@
                      role="option"
                      tabindex="0"
                      aria-selected="false"
-                     @onclick="() => SelectResult(result.Date)"
-                     @onkeydown="e => OnResultKey(e, result.Date)">
-                    <div class="result-date">@result.Date.ToString("yyyy-MM-dd")</div>
+                     @onclick="() => SelectResult(result)"
+                     @onkeydown="e => OnResultKey(e, result)">
+                    <div class="result-date">
+                        @if (result.Kind == Models.EntryKind.Doc)
+                        {
+                            <span class="result-kind" aria-hidden="true">📄</span>@result.Title
+                        }
+                        else
+                        {
+                            <span class="result-kind" aria-hidden="true">📔</span>@result.Date.ToString("yyyy-MM-dd")
+                        }
+                    </div>
                     <div class="result-preview">@GetPreview(result.Content)</div>
                 </div>
             }
@@ -50,6 +59,9 @@
 
     [Parameter]
     public EventCallback<DateOnly> OnEntrySelected { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnDocSelected { get; set; }
 
     private string Keyword { get; set; } = "";
     private List<Models.DiaryEntry>? SearchResults { get; set; }
@@ -102,20 +114,28 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task SelectResult(DateOnly date)
+    private async Task SelectResult(Models.DiaryEntry result)
     {
-        await DiaryStore.LoadEntryAsync(date);
-        await OnEntrySelected.InvokeAsync(date);
+        if (result.Kind == Models.EntryKind.Doc)
+        {
+            // Home.OnDocSelected owns the load (LoadDocAsync) and section switch.
+            await OnDocSelected.InvokeAsync(result.Path);
+        }
+        else
+        {
+            await DiaryStore.LoadEntryAsync(result.Date);
+            await OnEntrySelected.InvokeAsync(result.Date);
+        }
         ClearSearch();
     }
 
     // Enter / Space on a role="option" row selects the entry. Esc collapses
     // the results panel back to the input.
-    private Task OnResultKey(KeyboardEventArgs e, DateOnly date)
+    private Task OnResultKey(KeyboardEventArgs e, Models.DiaryEntry result)
     {
         if (e.Key == "Enter" || e.Key == " " || e.Key == "Spacebar")
         {
-            return SelectResult(date);
+            return SelectResult(result);
         }
         if (e.Key == "Escape")
         {
