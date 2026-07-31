@@ -77,6 +77,10 @@
     <script src="js/preview-interop.js"></script>
     <script src="js/mermaid-interop.js"></script>
     <script src="js/vault-interop.js"></script>
+    <!-- Turndown (HTML→Markdown, MIT, vendored for CSP) powers rich-text paste in
+         editor-interop.js. Load before it so the globals exist when a paste fires. -->
+    <script src="js/turndown.js"></script>
+    <script src="js/turndown-plugin-gfm.js"></script>
     <script src="js/editor-interop.js"></script>
     <script src="js/image-store.js"></script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>

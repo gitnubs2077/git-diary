@@ -348,6 +348,102 @@ window.gitdiaryEditor = (function () {
         });
     }
 
+    // --- Rich paste: convert pasted HTML → Markdown ---------------------------
+    // Pasting from a web page / doc puts an HTML fragment on the clipboard. A
+    // <textarea> can only hold plain text, so the browser would drop that to
+    // unformatted text. Instead we convert the HTML to Markdown (Turndown, vendored
+    // in wwwroot/js) and insert THAT — so **bold**, links, headings, lists, etc.
+    // survive as the editor's own native format.
+    let _td = null;
+    function getTurndown() {
+        if (_td) return _td;
+        if (typeof TurndownService === "undefined") return null; // library missing → plain paste
+        const td = new TurndownService({
+            headingStyle: "atx",
+            hr: "---",
+            bulletListMarker: "-",
+            codeBlockStyle: "fenced",
+            emDelimiter: "*",       // *italic*  — matches the toolbar
+            strongDelimiter: "**",  // **bold**
+            linkStyle: "inlined"
+        });
+        // GitHub tables, task lists ([ ] / [x]), and strikethrough.
+        if (typeof turndownPluginGfm !== "undefined") {
+            td.use(turndownPluginGfm.gfm);
+        }
+        // Override the GFM strikethrough rule (it emits a single "~", which Markdig
+        // reads as *subscript*). addRule prepends, so this wins over the plugin's.
+        td.addRule("strikethroughDouble", {
+            filter: ["del", "s", "strike"],
+            replacement: function (content) {
+                return content ? "~~" + content + "~~" : "";
+            }
+        });
+
+        // Underline. Markdown has no native underline; this editor writes ++text++
+        // (Markdig EmphasisExtras → <ins>). Cover <u>, <ins>, and inline
+        // text-decoration:underline (Google Docs / Office / arbitrary web pages).
+        td.addRule("underline", {
+            filter: function (node) {
+                if (node.nodeName === "U" || node.nodeName === "INS") return true;
+                const d = node.style && (node.style.textDecoration || node.style.textDecorationLine || "");
+                return /underline/.test(d || "");
+            },
+            replacement: function (content) {
+                return content ? "++" + content + "++" : "";
+            }
+        });
+
+        // Google Docs / Office express bold/italic/strike as inline styles on <span>,
+        // which Turndown's semantic-tag rules miss. Map them so formatting survives
+        // no matter how the source marked it up. A span may carry several at once.
+        td.addRule("styledSpan", {
+            filter: function (node) {
+                if (node.nodeName !== "SPAN" || !node.style) return false;
+                const fw = (node.style.fontWeight || "") + "";
+                const bold = fw === "bold" || parseInt(fw, 10) >= 600;
+                const italic = /italic|oblique/.test(node.style.fontStyle || "");
+                const deco = (node.style.textDecoration || node.style.textDecorationLine || "") + "";
+                return bold || italic || /underline|line-through/.test(deco);
+            },
+            replacement: function (content, node) {
+                if (!content || !content.trim()) return content;
+                const fw = (node.style.fontWeight || "") + "";
+                const deco = (node.style.textDecoration || node.style.textDecorationLine || "") + "";
+                let out = content;
+                if (/line-through/.test(deco)) out = "~~" + out + "~~";
+                if (/underline/.test(deco)) out = "++" + out + "++";
+                if (/italic|oblique/.test(node.style.fontStyle || "")) out = "*" + out + "*";
+                if (fw === "bold" || parseInt(fw, 10) >= 600) out = "**" + out + "**";
+                return out;
+            }
+        });
+
+        _td = td;
+        return _td;
+    }
+
+    function htmlToMarkdown(html) {
+        const td = getTurndown();
+        if (!td) return null;
+        try {
+            // Trim trailing block padding so a mid-line paste doesn't add blank lines.
+            return td.turndown(html).replace(/\s+$/, "");
+        } catch (e) {
+            return null; // conversion failed → caller falls back to plain paste
+        }
+    }
+
+    // Cmd/Ctrl+Shift+V arms a one-shot "paste as plain text" that skips the HTML→MD
+    // conversion (handy for code, or when the source formatting is unwanted).
+    let plainPasteArmed = false;
+    function onKeydownForPlainPaste(e) {
+        if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === "KeyV") {
+            plainPasteArmed = true;
+            setTimeout(function () { plainPasteArmed = false; }, 1000);
+        }
+    }
+
     // Document-level paste handler. There is only ever one editor mounted, so a single
     // global listener (kept in sync with the current .NET ref) is simpler and survives
     // the textarea being torn down and rebuilt across view-mode switches.
@@ -369,6 +465,24 @@ window.gitdiaryEditor = (function () {
                 return;
             }
         }
+
+        // Plain-text escape hatch → let the browser's default plain paste run.
+        if (plainPasteArmed) { plainPasteArmed = false; return; }
+
+        // Rich HTML on the clipboard → convert to Markdown and insert it.
+        const html = e.clipboardData ? e.clipboardData.getData("text/html") : "";
+        if (html && html.trim()) {
+            const md = htmlToMarkdown(html);
+            if (md && md.trim()) {
+                e.preventDefault();
+                const s = el.selectionStart, en = el.selectionEnd;
+                if (replaceRange(el, s, en, md)) {
+                    const caret = s + md.length;
+                    select(el, caret, caret);
+                }
+            }
+        }
+        // No HTML (plain text / code) → fall through to the browser's default paste.
     }
 
     return {
@@ -392,6 +506,7 @@ window.gitdiaryEditor = (function () {
             pasteRef = dotNetRef;
             if (!pasteBound) {
                 document.addEventListener("paste", onPaste);
+                document.addEventListener("keydown", onKeydownForPlainPaste, true);
                 pasteBound = true;
             }
         },
