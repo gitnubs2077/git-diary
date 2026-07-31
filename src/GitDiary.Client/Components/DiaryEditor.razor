@@ -470,6 +470,32 @@
         await AttachImageAsync(mime, base64, name);
     }
 
+    // Attach an image that was embedded (as a data: URL) inside pasted rich HTML, and
+    // hand back JUST its assets/ reference so the paste handler can rewrite the <img>
+    // src before converting the HTML to Markdown. Unlike OnImagePasted this does not
+    // insert anything itself — the whole converted block is inserted in one go.
+    [JSInvokable]
+    public async Task<string?> AttachPastedImageAsync(string mime, string base64, string name)
+    {
+        if (DiaryStore.CurrentEntry is null || string.IsNullOrEmpty(base64)) return null;
+        try
+        {
+            var markdown = await Images.AttachAsync(DiaryStore.CurrentEntry, mime, base64, name);
+            // AttachAsync returns "![alt](assets/xxx.ext)". The reference is the final
+            // "](...)" group and never contains ')', so this extraction is unambiguous
+            // regardless of what the alt text holds.
+            var open = markdown.LastIndexOf("](", StringComparison.Ordinal);
+            var close = markdown.LastIndexOf(')');
+            if (open >= 0 && close > open) return markdown.Substring(open + 2, close - open - 2);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] DiaryEditor.AttachPastedImage: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
+    }
+
     // Store the image locally (pending commit) and insert its Markdown reference at
     // the caret. The bytes go to GitHub only when the entry is committed.
     private async Task AttachImageAsync(string mime, string base64, string? name)

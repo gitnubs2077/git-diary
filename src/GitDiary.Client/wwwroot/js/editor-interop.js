@@ -434,6 +434,67 @@ window.gitdiaryEditor = (function () {
         }
     }
 
+    // Decode a data: URL into a File so an embedded image can reuse the same
+    // compress + upload path as a pasted screenshot.
+    function dataUrlToFile(dataUrl, filename) {
+        const m = /^data:([^;,]*)(;base64)?,([\s\S]*)$/i.exec(dataUrl);
+        if (!m) return null;
+        const mime = m[1] || "application/octet-stream";
+        let bytes;
+        try {
+            if (m[2]) {
+                const bin = atob(m[3]);
+                bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            } else {
+                bytes = new TextEncoder().encode(decodeURIComponent(m[3]));
+            }
+        } catch (e) { return null; }
+        return new File([bytes], filename || "image", { type: mime });
+    }
+
+    // Rich HTML that contains <img> tags. Embedded data: images are decoded and
+    // uploaded to the gallery (pending commit), then their <img> src is rewritten to the
+    // local assets/ reference before conversion — so pasted pictures are captured, not
+    // left as fragile external links. Remote-URL images can't be fetched under the app's
+    // CSP, so they degrade to their alt text. Async: inserts once uploads finish.
+    async function pasteHtmlWithImages(el, html, start, end) {
+        let md = null;
+        try {
+            const doc = new DOMParser().parseFromString(html, "text/html");
+            const imgs = Array.prototype.slice.call(doc.querySelectorAll("img"));
+            for (const img of imgs) {
+                const src = img.getAttribute("src") || "";
+                if (/^data:/i.test(src)) {
+                    const file = dataUrlToFile(src, img.getAttribute("alt") || "image");
+                    let ref = null;
+                    if (file) {
+                        try {
+                            const info = await compressIfNeeded(file);
+                            ref = await pasteRef.invokeMethodAsync(
+                                "AttachPastedImageAsync", info.mime, info.base64,
+                                info.name || img.getAttribute("alt") || "image");
+                        } catch (e) { ref = null; }
+                    }
+                    if (ref) { img.setAttribute("src", ref); img.removeAttribute("srcset"); }
+                    else img.remove();
+                } else {
+                    // Remote image: unreachable under the CSP — keep alt text, not a broken ref.
+                    const alt = img.getAttribute("alt");
+                    if (alt && alt.trim()) img.replaceWith(doc.createTextNode(alt));
+                    else img.remove();
+                }
+            }
+            md = htmlToMarkdown(doc.body.innerHTML);
+        } catch (e) {
+            md = htmlToMarkdown(html); // any failure → plain conversion, no image capture
+        }
+        if (md && md.trim() && replaceRange(el, start, end, md)) {
+            const caret = start + md.length;
+            select(el, caret, caret);
+        }
+    }
+
     // Cmd/Ctrl+Shift+V arms a one-shot "paste as plain text" that skips the HTML→MD
     // conversion (handy for code, or when the source formatting is unwanted).
     let plainPasteArmed = false;
@@ -472,13 +533,19 @@ window.gitdiaryEditor = (function () {
         // Rich HTML on the clipboard → convert to Markdown and insert it.
         const html = e.clipboardData ? e.clipboardData.getData("text/html") : "";
         if (html && html.trim()) {
-            const md = htmlToMarkdown(html);
-            if (md && md.trim()) {
+            if (/<img\b/i.test(html)) {
+                // Contains images → async path (uploads embedded images to the gallery).
                 e.preventDefault();
-                const s = el.selectionStart, en = el.selectionEnd;
-                if (replaceRange(el, s, en, md)) {
-                    const caret = s + md.length;
-                    select(el, caret, caret);
+                pasteHtmlWithImages(el, html, el.selectionStart, el.selectionEnd);
+            } else {
+                const md = htmlToMarkdown(html);
+                if (md && md.trim()) {
+                    e.preventDefault();
+                    const s = el.selectionStart, en = el.selectionEnd;
+                    if (replaceRange(el, s, en, md)) {
+                        const caret = s + md.length;
+                        select(el, caret, caret);
+                    }
                 }
             }
         }
