@@ -179,6 +179,14 @@
 
             StateHasChanged();
         }
+
+        // Every upload time is now known → settle the grid into upload-date order,
+        // newest first. OrderByDescending is stable, so images whose commit date
+        // couldn't be resolved keep their original (path) order and sink to the end.
+        _images = _images
+            .OrderByDescending(i => i.CommittedAt ?? DateTimeOffset.MinValue)
+            .ToList();
+        StateHasChanged();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
