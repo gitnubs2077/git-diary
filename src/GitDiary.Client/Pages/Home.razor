@@ -68,7 +68,14 @@ else
                 <SearchBox OnEntrySelected="OnEntrySelected" OnDocSelected="OnDocSelected" />
             </div>
             <div class="app-editor">
-                <DiaryEditor />
+                @if (DiaryStore.CurrentEntry?.IsPdf == true)
+                {
+                    <PdfViewer />
+                }
+                else
+                {
+                    <DiaryEditor />
+                }
             </div>
             <div class="app-statusbar">
                 <StatusBar IsOffline="_isOffline" />
@@ -99,6 +106,13 @@ else
                         <InputFile class="doc-upload-input"
                                    accept=".md,.markdown,text/markdown,text/plain"
                                    OnChange="HandleMdUpload"
+                                   disabled="@_newDocInFlight" />
+                    </label>
+                    <label class="doc-upload-link @(_newDocInFlight ? "disabled" : "")">
+                        <span aria-hidden="true">📕</span> @L["docs.uploadPdf"]
+                        <InputFile class="doc-upload-input"
+                                   accept=".pdf,application/pdf"
+                                   OnChange="HandlePdfUpload"
                                    disabled="@_newDocInFlight" />
                     </label>
                     <div class="modal-actions">
@@ -390,6 +404,42 @@ else
         {
             // Oversized/unreadable file — abort but leave the dialog open to retry.
             Console.Error.WriteLine($"[GitDiary] Home.HandleMdUpload: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            _newDocInFlight = false;
+        }
+    }
+
+    // Create a read-only document from a picked local .pdf file: its bytes are stored for
+    // the viewer and uploaded on commit; the filename (or a typed title) becomes the title.
+    private async Task HandlePdfUpload(InputFileChangeEventArgs e)
+    {
+        if (_newDocInFlight) return;
+        var file = e.File;
+        if (file is null) return;
+
+        _newDocInFlight = true;
+        try
+        {
+            // Read bytes → base64. Cap at 25 MB (GitHub's Contents API tops out well
+            // below its hard limit once base64-inflated; PDFs this large are unusual).
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(25L * 1024 * 1024).CopyToAsync(ms);
+            var base64 = Convert.ToBase64String(ms.ToArray());
+
+            var typed = _newDocTitle.Trim();
+            var title = string.IsNullOrEmpty(typed)
+                ? System.IO.Path.GetFileNameWithoutExtension(file.Name)
+                : typed;
+
+            _section = EntryKind.Doc;
+            await DiaryStore.CreatePdfDocAsync(title, base64);
+            _showNewDocDialog = false;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] Home.HandlePdfUpload: {ex.GetType().Name}: {ex.Message}");
         }
         finally
         {

@@ -18,4 +18,7 @@ public sealed class DiaryEntryInfo
 
     /// <summary>Creation timestamp — documents sort by this, newest first.</summary>
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>True for an uploaded PDF document (read-only, shown with a 📕 marker).</summary>
+    public bool IsPdf => Infrastructure.DocPaths.IsPdfPath(Path);
 }

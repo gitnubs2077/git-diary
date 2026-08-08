@@ -171,7 +171,7 @@
                          aria-current="@(IsDocSelected(doc.Path) ? "true" : "false")"
                          @onclick="() => SelectDoc(doc.Path)"
                          @onkeydown="e => OnActivateKey(e, () => SelectDoc(doc.Path))">
-                        <div class="doc-title">@doc.Title</div>
+                        <div class="doc-title">@if (doc.IsPdf) { <span class="doc-kind" aria-hidden="true">📕</span> }@doc.Title</div>
                         <div class="doc-meta">
                             <span>@doc.CreatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</span>
                             @if (string.IsNullOrEmpty(doc.Sha))

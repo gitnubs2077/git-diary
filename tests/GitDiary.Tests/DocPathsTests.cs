@@ -84,13 +84,40 @@ public class DocPathsTests
     [Theory]
     [InlineData("Docs/20260725-143005-title.md", true)]
     [InlineData("Docs/20260725-143005-会议.md", true)]
+    [InlineData("Docs/20260725-143005-report.pdf", true)]  // a PDF document
     [InlineData("Docs/assets/25-ab12cd34.png", false)]  // an image, not a doc
     [InlineData("Docs/notes.md", false)]                // no timestamp prefix
     [InlineData("Docs/20260725-143005-a/b.md", false)]  // nested past the doc file
     [InlineData("Diary/2026/07/25.md", false)]          // a diary entry
+    [InlineData("Docs/20260725-143005-x.txt", false)]   // unsupported extension
     [InlineData("", false)]
     public void IsDocPath_MatchesOnlyDocumentFiles(string path, bool expected)
     {
         Assert.Equal(expected, DocPaths.IsDocPath(path));
+    }
+
+    [Theory]
+    [InlineData("Docs/20260725-143005-report.pdf", true)]
+    [InlineData("Docs/20260725-143005-notes.md", false)]
+    [InlineData("Diary/2026/07/25.md", false)]
+    public void IsPdfPath_MatchesOnlyPdfDocuments(string path, bool expected)
+    {
+        Assert.Equal(expected, DocPaths.IsPdfPath(path));
+    }
+
+    [Fact]
+    public void BuildPath_UsesPdfExtension()
+    {
+        var path = DocPaths.BuildPath(T, "Q3 Report", "pdf");
+        Assert.Equal("Docs/20260725-143005-Q3 Report.pdf", path);
+        Assert.True(DocPaths.IsPdfPath(path));
+    }
+
+    [Fact]
+    public void Rename_PreservesPdfExtension()
+    {
+        var path = DocPaths.BuildPath(T, "old", "pdf");
+        var renamed = DocPaths.RenamePath(path, "new");
+        Assert.Equal("Docs/20260725-143005-new.pdf", renamed);
     }
 }

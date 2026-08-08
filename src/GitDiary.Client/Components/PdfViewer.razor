@@ -1,0 +1,203 @@
+@using GitDiary.Client.Stores
+@using GitDiary.Client.Models
+@using GitDiary.Client.Infrastructure
+@using GitDiary.Client.Services
+@implements IDisposable
+@inject DiaryStore DiaryStore
+@inject SettingsStore SettingsStore
+@inject LocalizationService L
+@inject IJSRuntime JS
+
+@* Read-only viewer for uploaded PDF documents. The PDF can't be embedded via
+   <embed>/<object> (object-src 'none') or an <iframe data:> (default-src 'self'),
+   so we build a same-origin blob: URL and frame that — allowed by the CSP's
+   `frame-src 'self' blob:`. *@
+<div class="pdf-viewer">
+    @if (DiaryStore.CurrentEntry is { IsPdf: true } entry)
+    {
+        <div class="editor-toolbar">
+            <span class="editor-doc-title-text pdf-title" title="@entry.Title">📕 @entry.Title</span>
+            <div class="editor-actions">
+                <button class="btn-commit"
+                        @onclick="CommitAsync"
+                        disabled="@(!CanCommit || _commitInFlight)"
+                        title="@L["editor.commitTooltip"]">
+                    @CommitButtonLabel
+                </button>
+                @if (_blobUrl is not null)
+                {
+                    <a class="btn-github-link" href="@_blobUrl" download="@DownloadName">⬇️ @L["pdf.download"]</a>
+                }
+                <button class="btn-delete" @onclick="ConfirmDelete">🗑️ @L["editor.delete"]</button>
+                @if (GitHubFileUrl is not null)
+                {
+                    <a class="btn-github-link"
+                       href="@GitHubFileUrl"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       title="@L["editor.viewOnGitHubTooltip"]">
+                        🔗 @L["editor.viewOnGitHub"]
+                    </a>
+                }
+            </div>
+        </div>
+
+        <div class="pdf-body">
+            @if (_loading)
+            {
+                <div class="pdf-status">@L["pdf.loading"]</div>
+            }
+            else if (_error is not null)
+            {
+                <div class="pdf-status pdf-error">@_error</div>
+            }
+            else if (_blobUrl is not null)
+            {
+                <iframe class="pdf-frame" src="@_blobUrl" title="@entry.Title"></iframe>
+            }
+        </div>
+
+        @if (_showDeleteConfirm)
+        {
+            <div class="modal-overlay" @onclick="CancelDelete">
+                <div class="modal-dialog" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+                    <div class="modal-content">
+                        <h3>@L["editor.deleteTitle"]</h3>
+                        <p>@L["editor.deleteConfirm"]</p>
+                        <p class="modal-date">@entry.Title</p>
+                        <div class="modal-actions">
+                            <button class="btn-cancel" @onclick="CancelDelete">@L["editor.cancel"]</button>
+                            <button class="btn-confirm-delete" @onclick="DeleteAsync" disabled="@_deleteInFlight">@L["editor.confirmDelete"]</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private string? _blobUrl;
+    private string? _loadedPath;
+    private bool _loading;
+    private string? _error;
+    private bool _commitInFlight;
+    private bool _showDeleteConfirm;
+    private bool _deleteInFlight;
+
+    private bool CanCommit =>
+        DiaryStore.CurrentEntry is { } e
+        && string.IsNullOrEmpty(e.Sha)
+        && DiaryStore.SyncState != SyncState.Saving;
+
+    private string CommitButtonLabel => DiaryStore.SyncState switch
+    {
+        SyncState.Saving => $"⏫ {L["editor.committing"]}",
+        SyncState.Conflict => $"⚠️ {L["editor.commitConflict"]}",
+        SyncState.Failed => $"🔁 {L["editor.retryCommit"]}",
+        _ => $"⏫ {L["editor.commit"]}"
+    };
+
+    private string DownloadName => $"{DiaryStore.CurrentEntry?.Title ?? "document"}.pdf";
+
+    private string? GitHubFileUrl =>
+        DiaryStore.CurrentEntry is { } e && !string.IsNullOrEmpty(e.Sha)
+            ? PathHelper.GetGitHubFileUrlForPath(SettingsStore.Config, e.Path)
+            : null;
+
+    protected override void OnInitialized()
+    {
+        DiaryStore.StateChanged += OnStoreChanged;
+        L.StateChanged += OnStoreChanged;
+    }
+
+    protected override async Task OnInitializedAsync() => await MaybeReloadAsync();
+
+    private async void OnStoreChanged()
+    {
+        try { await InvokeAsync(MaybeReloadAsync); }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GitDiary] PdfViewer.OnStoreChanged: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    // Fetch + frame the PDF only when the OPEN document changes. Commit/state changes
+    // (same path, blob already built) just re-render so the toolbar reflects them.
+    private async Task MaybeReloadAsync()
+    {
+        var entry = DiaryStore.CurrentEntry;
+        if (entry is not { IsPdf: true })
+        {
+            RevokeBlob();
+            _loadedPath = null; _error = null; _loading = false;
+            return;
+        }
+        if (entry.Path == _loadedPath && _blobUrl is not null)
+        {
+            StateHasChanged();
+            return;
+        }
+
+        _loadedPath = entry.Path;
+        RevokeBlob();
+        _loading = true; _error = null;
+        StateHasChanged();
+
+        string? base64;
+        try { base64 = await DiaryStore.LoadPdfBase64Async(entry); }
+        catch { base64 = null; }
+
+        if (string.IsNullOrEmpty(base64))
+        {
+            _loading = false; _error = L["pdf.loadError"];
+            StateHasChanged();
+            return;
+        }
+
+        try { _blobUrl = await JS.InvokeAsync<string>("gitdiaryPdf.toBlobUrl", base64, "application/pdf"); }
+        catch { _error = L["pdf.loadError"]; }
+
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task CommitAsync()
+    {
+        if (_commitInFlight || !CanCommit) return;
+        _commitInFlight = true;
+        try { await DiaryStore.CommitCurrentEntryAsync(); }
+        finally { _commitInFlight = false; }
+    }
+
+    private void ConfirmDelete() => _showDeleteConfirm = true;
+    private void CancelDelete() => _showDeleteConfirm = false;
+
+    private async Task DeleteAsync()
+    {
+        if (_deleteInFlight) return;
+        _deleteInFlight = true;
+        try
+        {
+            await DiaryStore.DeleteCurrentEntryAsync();
+            _showDeleteConfirm = false;
+        }
+        finally { _deleteInFlight = false; }
+    }
+
+    private void RevokeBlob()
+    {
+        if (_blobUrl is null) return;
+        var url = _blobUrl;
+        _blobUrl = null;
+        try { _ = JS.InvokeVoidAsync("gitdiaryPdf.revoke", url); }
+        catch { /* JS gone during teardown — the browser reclaims the blob anyway */ }
+    }
+
+    public void Dispose()
+    {
+        DiaryStore.StateChanged -= OnStoreChanged;
+        L.StateChanged -= OnStoreChanged;
+        RevokeBlob();
+    }
+}

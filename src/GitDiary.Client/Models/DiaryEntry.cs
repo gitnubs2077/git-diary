@@ -26,4 +26,7 @@ public sealed class DiaryEntry
 
     /// <summary>Creation timestamp — the sort key for documents (newest first).</summary>
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>True for an uploaded PDF document: binary, read-only (viewed, not edited).</summary>
+    public bool IsPdf => Infrastructure.DocPaths.IsPdfPath(Path);
 }

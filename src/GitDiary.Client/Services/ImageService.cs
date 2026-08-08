@@ -205,6 +205,47 @@ public sealed class ImageService
         return Result<bool>.Success(true);
     }
 
+    // --- Generic binary documents (uploaded PDFs) --------------------------------
+    // A PDF "document" is just a binary blob keyed by its Docs/…pdf repo path, reusing
+    // the same encrypted IndexedDB store and raw-base64 GitHub upload as images.
+
+    /// <summary>Store an uploaded binary document locally, pending commit.</summary>
+    public async Task StorePendingFileAsync(string repoPath, string mime, string base64)
+    {
+        var envelope = JsonSerializer.Serialize(new StoredImage(mime, base64));
+        var payload = _vault.IsUnlocked ? await _vault.EncryptStringAsync(envelope) : envelope;
+        await _js.InvokeVoidAsync("gitdiaryImageStore.put", repoPath, payload);
+    }
+
+    /// <summary>The pending (not-yet-committed) document's bytes as base64, or null.</summary>
+    public async Task<string?> LoadPendingFileBase64Async(string repoPath)
+    {
+        var stored = await LoadPendingAsync(repoPath);
+        return stored?.Base64;
+    }
+
+    /// <summary>Drop a pending document's local copy (e.g. deleted before it was committed).</summary>
+    public async Task RemovePendingFileAsync(string repoPath)
+    {
+        try { await _js.InvokeVoidAsync("gitdiaryImageStore.remove", repoPath); }
+        catch { /* IndexedDB unavailable — nothing to drop */ }
+    }
+
+    /// <summary>Commit a pending binary document: PUT its bytes, drop the local copy,
+    /// and return the new file SHA.</summary>
+    public async Task<Result<string>> CommitPendingFileAsync(string repoPath, string message)
+    {
+        var stored = await LoadPendingAsync(repoPath);
+        if (stored is null) return Result<string>.Failure("No pending file to upload");
+        var res = await _api.CreateBinaryFileAsync(repoPath, stored.Base64, message);
+        if (res.IsSuccess) await RemovePendingFileAsync(repoPath);
+        return res;
+    }
+
+    /// <summary>A committed document's bytes as base64 (for the viewer). Not capped at 1 MB.</summary>
+    public Task<Result<string>> GetCommittedFileBase64Async(string repoPath) =>
+        _api.GetRawBase64Async(repoPath);
+
     private async Task<StoredImage?> LoadPendingAsync(string repoPath)
     {
         string? raw;

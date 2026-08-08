@@ -23,10 +23,11 @@ public static class DocPaths
     private const int MaxTitleLength = 80;
     private const string TimestampFormat = "yyyyMMdd-HHmmss";
 
-    // Docs/20260725-143005-<title>.md — a SINGLE segment after Docs/, so this never
+    // Docs/20260725-143005-<title>.md|pdf — a SINGLE segment after Docs/, so this never
     // matches Docs/assets/<image> (which has an extra '/' and no timestamp prefix).
+    // Group 3 is the extension: "md" for editable notes, "pdf" for read-only uploads.
     private static readonly Regex DocPattern = new(
-        $@"^{Regex.Escape(BaseDirectory)}/(\d{{8}}-\d{{6}})-([^/]*)\.md$",
+        $@"^{Regex.Escape(BaseDirectory)}/(\d{{8}}-\d{{6}})-([^/]*)\.(md|pdf)$",
         RegexOptions.Compiled);
 
     // Characters that are illegal in a path segment across git / URLs / filesystems,
@@ -37,9 +38,10 @@ public static class DocPaths
 
     private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
 
-    /// <summary>Repo path for a new document created at <paramref name="createdAt"/>.</summary>
-    public static string BuildPath(DateTimeOffset createdAt, string? title) =>
-        $"{BaseDirectory}/{createdAt.ToString(TimestampFormat, CultureInfo.InvariantCulture)}-{SanitizeTitle(title)}.md";
+    /// <summary>Repo path for a new document created at <paramref name="createdAt"/>.
+    /// <paramref name="extension"/> is "md" for editable notes or "pdf" for uploads.</summary>
+    public static string BuildPath(DateTimeOffset createdAt, string? title, string extension = "md") =>
+        $"{BaseDirectory}/{createdAt.ToString(TimestampFormat, CultureInfo.InvariantCulture)}-{SanitizeTitle(title)}.{extension}";
 
     /// <summary>
     /// Filename-safe form of a title: illegal characters removed, whitespace collapsed,
@@ -56,6 +58,14 @@ public static class DocPaths
     /// <summary>True for a document file (excludes Docs/assets images and subfolders).</summary>
     public static bool IsDocPath(string? path) =>
         !string.IsNullOrEmpty(path) && DocPattern.IsMatch(path);
+
+    /// <summary>True for a read-only PDF document (a <c>.pdf</c> under Docs/).</summary>
+    public static bool IsPdfPath(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return false;
+        var m = DocPattern.Match(path);
+        return m.Success && m.Groups[3].Value == "pdf";
+    }
 
     /// <summary>The creation timestamp encoded in the filename, or null if not a doc path.</summary>
     public static DateTimeOffset? ParseCreatedAt(string path)
@@ -84,7 +94,7 @@ public static class DocPaths
     {
         var m = DocPattern.Match(oldPath);
         return m.Success
-            ? $"{BaseDirectory}/{m.Groups[1].Value}-{SanitizeTitle(newTitle)}.md"
+            ? $"{BaseDirectory}/{m.Groups[1].Value}-{SanitizeTitle(newTitle)}.{m.Groups[3].Value}"
             : null;
     }
 }

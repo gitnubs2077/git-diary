@@ -42,7 +42,7 @@
         Note: frame-ancestors is intentionally omitted — it is ignored in <meta>
         CSPs by every browser and must be supplied via HTTP headers instead.
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.githubusercontent.com; font-src 'self' data:; connect-src 'self' https://api.github.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.githubusercontent.com; font-src 'self' data:; connect-src 'self' https://api.github.com; manifest-src 'self'; worker-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <title>GitDiary</title>
     <base href="/" />
     <link rel="preload" id="webassembly" />
@@ -83,6 +83,7 @@
     <script src="js/turndown-plugin-gfm.js"></script>
     <script src="js/editor-interop.js"></script>
     <script src="js/image-store.js"></script>
+    <script src="js/pdf-interop.js"></script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
     <script src="js/sw-register.js"></script>
 </body>

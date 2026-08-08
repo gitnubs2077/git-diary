@@ -224,6 +224,9 @@ public sealed class DiaryStore : StoreBase
     {
         if (CurrentEntry == null) return;
 
+        // A PDF is binary and read-only — commit its bytes directly, no text/draft dance.
+        if (CurrentEntry.IsPdf) { await CommitCurrentPdfAsync(); return; }
+
         // Snapshot the exact bytes we are about to send. Anything the user types
         // after this line is a NEW edit that must survive the commit.
         var committedContent = CurrentContent;
@@ -326,12 +329,43 @@ public sealed class DiaryStore : StoreBase
         }
     }
 
+    // Commit an uploaded PDF: push its pending bytes as a new binary file, then clear the
+    // local draft/copy. PDFs are never edited, so there's no content snapshot or retry
+    // buffer to manage — success flips it to Synced, failure leaves the pending copy.
+    private async Task CommitCurrentPdfAsync()
+    {
+        var entry = CurrentEntry!;
+        var wasNew = string.IsNullOrEmpty(entry.Sha);
+        SyncState = SyncState.Saving;
+        entry.SyncState = SyncState.Saving;
+        NotifyStateChanged();
+
+        var res = await _images.CommitPendingFileAsync(entry.Path, $"Add document {entry.Path}");
+        if (res.IsSuccess)
+        {
+            entry.Sha = res.Value!;
+            entry.SyncState = SyncState.Synced;
+            SyncState = SyncState.Synced;
+            IsDirty = false;
+            await _indexedDb.RemoveDraftAsync(entry.Path);
+            if (wasNew) await RefreshDocsAsync();
+        }
+        else
+        {
+            var failed = res.IsConflict ? SyncState.Conflict : SyncState.Failed;
+            entry.SyncState = failed;
+            SyncState = failed;
+        }
+        NotifyStateChanged();
+    }
+
     public async Task<Result<bool>> DeleteCurrentEntryAsync()
     {
         if (CurrentEntry == null) return Result<bool>.Success(true);
 
         var path = CurrentEntry.Path;
         var kind = CurrentEntry.Kind;
+        var isPdf = CurrentEntry.IsPdf;
         var result = await _diaryRepo.DeleteAsync(CurrentEntry);
         if (result.IsFailure)
         {
@@ -344,6 +378,7 @@ public sealed class DiaryStore : StoreBase
         }
 
         await _indexedDb.RemoveDraftAsync(path);
+        if (isPdf) await _images.RemovePendingFileAsync(path);
         CurrentEntry = null;
         CurrentContent = "";
         IsDirty = false;
@@ -444,6 +479,29 @@ public sealed class DiaryStore : StoreBase
     public async Task LoadDocAsync(string path)
     {
         IsLoading = true;
+
+        // A PDF has no text to fetch — the viewer loads the bytes itself. Build the entry
+        // from the path + the list row's SHA (present once committed, empty for a draft).
+        if (DocPaths.IsPdfPath(path))
+        {
+            var info = _docs.FirstOrDefault(d => d.Path == path);
+            var sha = info?.Sha ?? "";
+            var createdAt = DocPaths.ParseCreatedAt(path) ?? DateTimeOffset.Now;
+            CurrentEntry = new DiaryEntry
+            {
+                Kind = EntryKind.Doc, Path = path, Title = DocPaths.ParseTitle(path),
+                CreatedAt = createdAt, Date = DateOnly.FromDateTime(createdAt.LocalDateTime),
+                Content = "", Sha = sha,
+                SyncState = string.IsNullOrEmpty(sha) ? SyncState.Pending : SyncState.Synced,
+            };
+            CurrentContent = "";
+            IsDirty = false;
+            SyncState = CurrentEntry.SyncState;
+            SetLoadError(null, null);
+            IsLoading = false;
+            return;
+        }
+
         var result = await _diaryRepo.LoadDocAsync(path);
         if (result.IsSuccess)
         {
@@ -465,6 +523,17 @@ public sealed class DiaryStore : StoreBase
             SetLoadError(result.Error, result.StatusCode);
         }
         IsLoading = false;
+    }
+
+    /// <summary>Bytes (base64) of a PDF document for the viewer: the local pending copy
+    /// while uncommitted, otherwise the committed file fetched from GitHub. Null if it
+    /// can't be found.</summary>
+    public async Task<string?> LoadPdfBase64Async(DiaryEntry entry)
+    {
+        if (string.IsNullOrEmpty(entry.Sha))
+            return await _images.LoadPendingFileBase64Async(entry.Path);
+        var res = await _images.GetCommittedFileBase64Async(entry.Path);
+        return res.IsSuccess ? res.Value : null;
     }
 
     /// <summary>
@@ -498,6 +567,36 @@ public sealed class DiaryStore : StoreBase
             Path = path, Content = entry.Content, Sha = "",
             State = SyncState.Pending, UpdatedAt = createdAt
         });
+
+        await RefreshDocsAsync();
+    }
+
+    /// <summary>
+    /// Create a read-only PDF document from uploaded bytes. The binary is stored locally
+    /// (pending commit) in the same encrypted store as images; a blank draft marks it as
+    /// pending so it lists and survives reload. Opened in the viewer, uploaded on commit.
+    /// </summary>
+    public async Task CreatePdfDocAsync(string title, string base64)
+    {
+        var createdAt = DateTimeOffset.Now;
+        var path = DocPaths.BuildPath(createdAt, title, "pdf");
+        var displayTitle = DocPaths.ParseTitle(path);
+
+        await _images.StorePendingFileAsync(path, "application/pdf", base64);
+        await _indexedDb.SaveDraftAsync(new Draft
+        {
+            Path = path, Content = "", Sha = "", State = SyncState.Pending, UpdatedAt = createdAt
+        });
+
+        CurrentEntry = new DiaryEntry
+        {
+            Kind = EntryKind.Doc, Path = path, Title = displayTitle, CreatedAt = createdAt,
+            Date = DateOnly.FromDateTime(createdAt.LocalDateTime),
+            Content = "", Sha = "", SyncState = SyncState.Pending,
+        };
+        CurrentContent = "";
+        SyncState = SyncState.Pending;
+        IsDirty = true;
 
         await RefreshDocsAsync();
     }
@@ -572,6 +671,17 @@ public sealed class DiaryStore : StoreBase
         // Unified search: documents are indexed alongside diary entries.
         foreach (var info in _docs)
         {
+            // PDFs are binary — index the title only (no text body to fetch/scan).
+            if (info.IsPdf)
+            {
+                entries.Add(new DiaryEntry
+                {
+                    Kind = EntryKind.Doc, Path = info.Path, Title = info.Title,
+                    CreatedAt = info.CreatedAt, Content = ""
+                });
+                continue;
+            }
+
             var result = await _diaryRepo.LoadDocAsync(info.Path);
             if (result.IsSuccess && result.Value != null)
                 entries.Add(result.Value);
