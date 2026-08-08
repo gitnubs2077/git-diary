@@ -470,19 +470,22 @@ public sealed class DiaryStore : StoreBase
     /// <summary>
     /// Start a NEW document with the given title: build its path/content, open it in the
     /// editor as an uncommitted draft, and surface it at the top of the doc list. It is
-    /// written to GitHub on the next commit.
+    /// written to GitHub on the next commit. When <paramref name="content"/> is supplied
+    /// (e.g. an uploaded .md file) it becomes the body verbatim; otherwise the doc opens
+    /// with a "# {title}" heading.
     /// </summary>
-    public async Task CreateDocAsync(string title)
+    public async Task CreateDocAsync(string title, string? content = null)
     {
         var createdAt = DateTimeOffset.Now;
         var path = DocPaths.BuildPath(createdAt, title);
         var displayTitle = DocPaths.ParseTitle(path);
+        var body = string.IsNullOrEmpty(content) ? $"# {displayTitle}\n\n" : content;
 
         var entry = new DiaryEntry
         {
             Kind = EntryKind.Doc, Path = path, Title = displayTitle, CreatedAt = createdAt,
             Date = DateOnly.FromDateTime(createdAt.LocalDateTime),
-            Content = $"# {displayTitle}\n\n", Sha = "", SyncState = SyncState.Pending,
+            Content = body, Sha = "", SyncState = SyncState.Pending,
         };
 
         CurrentEntry = entry;

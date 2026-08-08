@@ -17,6 +17,7 @@
   "docs.newTitle": "新規ドキュメント",
   "docs.titlePlaceholder": "ドキュメントのタイトル",
   "docs.create": "作成",
+  "docs.uploadMd": ".md ファイルをアップロード",
   "docs.rename": "名前を変更",
   "theme.modeHeading": "モード",
   "theme.system": "システムに従う",

@@ -17,6 +17,7 @@
   "docs.newTitle": "New document",
   "docs.titlePlaceholder": "Document title",
   "docs.create": "Create",
+  "docs.uploadMd": "Upload a .md file",
   "docs.rename": "Rename",
   "theme.modeHeading": "Mode",
   "theme.system": "System",

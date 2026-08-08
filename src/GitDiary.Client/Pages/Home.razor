@@ -94,6 +94,13 @@ else
                            @bind:event="oninput"
                            @onkeydown="HandleNewDocKey"
                            @ref="_newDocInputRef" />
+                    <label class="doc-upload-link @(_newDocInFlight ? "disabled" : "")">
+                        <span aria-hidden="true">📄</span> @L["docs.uploadMd"]
+                        <InputFile class="doc-upload-input"
+                                   accept=".md,.markdown,text/markdown,text/plain"
+                                   OnChange="HandleMdUpload"
+                                   disabled="@_newDocInFlight" />
+                    </label>
                     <div class="modal-actions">
                         <button class="btn-cancel" @onclick="CancelNewDoc">@L["editor.cancel"]</button>
                         <button class="btn-doc-create" @onclick="ConfirmNewDoc" disabled="@_newDocInFlight">@L["docs.create"]</button>
@@ -349,6 +356,45 @@ else
     {
         if (e.Key == "Enter") await ConfirmNewDoc();
         else if (e.Key == "Escape") CancelNewDoc();
+    }
+
+    // Create a document from a picked local .md file: its text becomes the body and its
+    // filename (or a title already typed in the dialog) becomes the doc title.
+    private async Task HandleMdUpload(InputFileChangeEventArgs e)
+    {
+        if (_newDocInFlight) return;
+        var file = e.File;
+        if (file is null) return;
+
+        _newDocInFlight = true;
+        try
+        {
+            string content;
+            // Cap at 5 MB — Markdown notes are tiny; this just guards against a stray
+            // huge/binary file blowing up the read.
+            using (var reader = new StreamReader(file.OpenReadStream(5 * 1024 * 1024)))
+            {
+                content = await reader.ReadToEndAsync();
+            }
+
+            var typed = _newDocTitle.Trim();
+            var title = string.IsNullOrEmpty(typed)
+                ? System.IO.Path.GetFileNameWithoutExtension(file.Name)
+                : typed;
+
+            _section = EntryKind.Doc;
+            await DiaryStore.CreateDocAsync(title, content);
+            _showNewDocDialog = false;
+        }
+        catch (Exception ex)
+        {
+            // Oversized/unreadable file — abort but leave the dialog open to retry.
+            Console.Error.WriteLine($"[GitDiary] Home.HandleMdUpload: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            _newDocInFlight = false;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
