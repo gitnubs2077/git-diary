@@ -423,12 +423,39 @@ window.gitdiaryEditor = (function () {
         return _td;
     }
 
+    // Turndown collapses HTML whitespace the way a browser renders it, which silently
+    // eats the line breaks in white-space:pre-wrap content — e.g. an X/Twitter post,
+    // where each line is a raw "\n" inside a <span>, not a <br>. Convert those content
+    // newlines to <br> first so they survive as hard breaks. Only text nodes that carry
+    // real text are touched; whitespace-only nodes (inter-tag formatting) are left alone
+    // so normal pasted HTML doesn't gain spurious breaks.
+    function convertContentNewlines(root) {
+        const d = root.ownerDocument;
+        const walker = d.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+        const targets = [];
+        let n;
+        while ((n = walker.nextNode())) {
+            if (n.nodeValue.indexOf("\n") >= 0 && /\S/.test(n.nodeValue)) targets.push(n);
+        }
+        for (const node of targets) {
+            const parts = node.nodeValue.split("\n");
+            const frag = d.createDocumentFragment();
+            for (let j = 0; j < parts.length; j++) {
+                if (j > 0) frag.appendChild(d.createElement("br"));
+                if (parts[j]) frag.appendChild(d.createTextNode(parts[j]));
+            }
+            node.parentNode.replaceChild(frag, node);
+        }
+    }
+
     function htmlToMarkdown(html) {
         const td = getTurndown();
         if (!td) return null;
         try {
+            const doc = new DOMParser().parseFromString(html, "text/html");
+            convertContentNewlines(doc.body);
             // Trim trailing block padding so a mid-line paste doesn't add blank lines.
-            return td.turndown(html).replace(/\s+$/, "");
+            return td.turndown(doc.body.innerHTML).replace(/\s+$/, "");
         } catch (e) {
             return null; // conversion failed → caller falls back to plain paste
         }
