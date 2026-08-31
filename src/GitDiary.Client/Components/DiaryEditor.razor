@@ -375,6 +375,14 @@
         // doesn't kill the editor.
         try
         {
+            // A sidebar action may have requested a view mode for this load:
+            // "+今日" → Edit, picking a date → Preview. Apply and clear it once.
+            var pending = DiaryStore.PendingViewMode;
+            if (pending is not null)
+            {
+                DiaryStore.PendingViewMode = null;
+                _viewMode = ParseViewMode(pending);
+            }
             await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)

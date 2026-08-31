@@ -50,6 +50,12 @@ public sealed class DiaryStore : StoreBase
         }
     }
 
+    /// <summary>One-shot hint for the editor's view mode on the next entry load
+    /// ("edit" or "preview"): the sidebar sets it so "+今日" opens in Edit and picking a
+    /// date opens in Preview. The editor applies and clears it. Null keeps the current
+    /// (persisted) mode — e.g. on boot.</summary>
+    public string? PendingViewMode { get; set; }
+
     public bool IsLoading
     {
         get => _isLoading;

@@ -280,7 +280,8 @@
         {
             var today = PathHelper.GetToday();
             EnsureExpanded(today);
-            await SelectEntry(today);
+            // Boot, not an explicit pick → keep the persisted view mode.
+            await SelectEntry(today, userInitiated: false);
         }
     }
 
@@ -380,9 +381,12 @@
         }
     }
 
-    private async Task SelectEntry(DateOnly date)
+    // userInitiated: a real click/keyboard pick opens the entry in Preview (you're
+    // reading it); the boot auto-select passes false so it keeps the persisted mode.
+    private async Task SelectEntry(DateOnly date, bool userInitiated = true)
     {
         SelectedDate = date;
+        if (userInitiated) DiaryStore.PendingViewMode = "preview";
         await DiaryStore.LoadEntryAsync(date);
         await OnEntrySelected.InvokeAsync(date);
     }
@@ -391,7 +395,10 @@
     {
         var today = PathHelper.GetToday();
         SelectedDate = today;
+        // "+今日" means "write today" → open in Edit.
+        DiaryStore.PendingViewMode = "edit";
         await DiaryStore.LoadEntryAsync(today);
+        await OnEntrySelected.InvokeAsync(today);
     }
 
     private async Task SwitchSection(EntryKind kind)
